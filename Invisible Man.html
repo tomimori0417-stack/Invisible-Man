@@ -2,121 +2,39 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>光学迷彩・透明マント（四角形で発動／両手パーで解除）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>光学迷彩・透明マント（撮影＆録画対応版）</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <style>
-    body {
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
       margin: 0;
       padding: 0;
-      background-color: #111;
+      width: 100vw;
+      height: 100dvh;
+      background-color: #000;
       color: white;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
-    #ui-container {
-      width: 92%;
-      max-width: 760px;
-      margin-top: 10px;
-      z-index: 10;
-      text-align: center;
-      background: rgba(20, 20, 20, 0.9);
-      padding: 12px 16px;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.7);
-      border: 1px solid #333;
-    }
-    #status {
-      font-size: 15px;
-      font-weight: bold;
-      color: #00e5ff;
-      margin-bottom: 10px;
-    }
-    .btn-row {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 10px;
-    }
-    button {
-      padding: 10px 14px;
-      font-size: 14px;
-      font-weight: bold;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: opacity 0.2s, transform 0.1s;
-    }
-    button:active:not(:disabled) {
-      transform: scale(0.97);
-    }
-    button:disabled {
-      background: #444 !important;
-      color: #888 !important;
-      cursor: not-allowed;
-    }
-    .btn-bg {
-      background: #28a745;
-      color: white;
-    }
-    .btn-timer {
-      background: #17a2b8;
-      color: white;
-    }
-    .btn-cam {
-      background: #6f42c1;
-      color: white;
-    }
-    .btn-toggle {
-      background: #ff9800;
-      color: #000;
-    }
-    .slider-row {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      font-size: 13px;
-      color: #ddd;
-      background: rgba(255,255,255,0.06);
-      padding: 6px 12px;
-      border-radius: 6px;
-      flex-wrap: wrap;
-    }
-    input[type="range"] {
-      width: 140px;
-      accent-color: #00e5ff;
-      cursor: pointer;
-    }
-    #gauge-container {
-      margin-top: 8px;
-      width: 100%;
-      height: 6px;
-      background: #333;
-      border-radius: 3px;
       overflow: hidden;
+      position: relative;
+      touch-action: none;
     }
-    #gauge-bar {
-      width: 0%;
-      height: 100%;
-      background: linear-gradient(90deg, #00e5ff, #76ff03);
-    }
+
     canvas {
-      width: 96%;
-      max-width: 800px;
-      height: auto;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100dvh;
+      object-fit: cover;
       background: #000;
-      border-radius: 10px;
-      box-shadow: 0 8px 25px rgba(0,0,0,0.8);
-      margin-top: 10px;
-      margin-bottom: 20px;
+      z-index: 1;
+      touch-action: none;
     }
     canvas.mirror {
       transform: scaleX(-1);
@@ -124,30 +42,436 @@
     video {
       display: none;
     }
+
+    /* 写真撮影時のフラッシュ演出 */
+    #flash-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100dvh;
+      background: white;
+      z-index: 40;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease-out;
+    }
+
+    #floating-status {
+      position: absolute;
+      top: max(14px, env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: bold;
+      color: #00e5ff;
+      white-space: nowrap;
+      max-width: 78vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transition: opacity 0.3s;
+    }
+
+    #zoom-toast {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 22;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      color: #fff;
+      font-size: 22px;
+      font-weight: bold;
+      padding: 12px 24px;
+      border-radius: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    #zoom-toast.show {
+      opacity: 1;
+    }
+
+    #top-gauge-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 4px;
+      background: transparent;
+      z-index: 25;
+      pointer-events: none;
+    }
+    #gauge-bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #00e5ff, #76ff03);
+      box-shadow: 0 0 8px #76ff03;
+    }
+
+    /* 右上の「⚙️」設定開閉ボタン */
+    #settings-toggle-btn {
+      position: absolute;
+      top: max(10px, env(safe-area-inset-top));
+      right: 12px;
+      z-index: 30;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(20, 20, 20, 0.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: white;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      transition: transform 0.2s, background 0.2s;
+      padding: 0;
+    }
+    #settings-toggle-btn:active {
+      transform: scale(0.92);
+    }
+
+    /* 右下の撮影・録画フローティングボタン群 */
+    #capture-controls {
+      position: absolute;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      right: 14px;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    #rec-timer {
+      background: rgba(220, 20, 20, 0.85);
+      color: #fff;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 3px 8px;
+      border-radius: 10px;
+      display: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    }
+    .fab-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(20, 20, 20, 0.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1.5px solid rgba(255, 255, 255, 0.35);
+      color: white;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      transition: transform 0.15s, background 0.2s, border-color 0.2s;
+      padding: 0;
+    }
+    .fab-btn:active {
+      transform: scale(0.9);
+    }
+    /* 録画中の赤い点滅スタイル */
+    .fab-btn.recording {
+      background: rgba(220, 20, 20, 0.85);
+      border-color: #ff8a80;
+      animation: pulse-rec 1.2s infinite;
+    }
+    @keyframes pulse-rec {
+      0% { box-shadow: 0 0 0 0 rgba(255, 50, 50, 0.7); }
+      70% { box-shadow: 0 0 0 12px rgba(255, 50, 50, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 50, 50, 0); }
+    }
+
+    /* 折りたたみ可能な設定パネル */
+    #ui-container {
+      position: absolute;
+      top: calc(max(10px, env(safe-area-inset-top)) + 50px);
+      right: 12px;
+      left: 12px;
+      max-width: 520px;
+      margin: 0 auto;
+      z-index: 25;
+      text-align: center;
+      background: rgba(18, 18, 18, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 14px;
+      border-radius: 16px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.8);
+      border: 1px solid rgba(255,255,255,0.15);
+      transition: opacity 0.25s ease, transform 0.25s ease, visibility 0.25s;
+      transform-origin: top right;
+    }
+    #ui-container.hidden {
+      opacity: 0;
+      transform: scale(0.9) translateY(-10px);
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 10px;
+      padding: 0 4px;
+    }
+    .close-panel-btn {
+      background: transparent;
+      border: none;
+      color: #aaa;
+      font-size: 16px;
+      padding: 2px 6px;
+      cursor: pointer;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    button.action-btn {
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button.action-btn:active:not(:disabled) {
+      transform: scale(0.96);
+    }
+    button.action-btn:disabled {
+      background: #444 !important;
+      color: #888 !important;
+      cursor: not-allowed;
+    }
+    .btn-bg { background: #28a745; color: white; }
+    .btn-timer { background: #17a2b8; color: white; }
+    .btn-cam { background: #6f42c1; color: white; }
+    .btn-toggle { background: #ff9800; color: #000; }
+    .btn-zoom {
+      padding: 4px 12px;
+      font-size: 15px;
+      font-weight: bold;
+      background: #444;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .controls-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: rgba(255,255,255,0.06);
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      color: #ddd;
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    input[type="range"] {
+      width: 120px;
+      accent-color: #00e5ff;
+      cursor: pointer;
+    }
+
+    /* スマホで保存しやすくするプレビュー＆保存モーダル */
+    #media-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100dvh;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #media-modal.hidden {
+      display: none;
+    }
+    .modal-card {
+      background: #1e1e1e;
+      border: 1px solid #444;
+      border-radius: 16px;
+      padding: 16px;
+      max-width: 92vw;
+      width: 420px;
+      text-align: center;
+      box-shadow: 0 10px 35px rgba(0,0,0,0.9);
+    }
+    .modal-title {
+      font-size: 15px;
+      font-weight: bold;
+      color: #00e5ff;
+      margin-bottom: 10px;
+    }
+    #preview-container img,
+    #preview-container video {
+      max-width: 100%;
+      max-height: 55dvh;
+      border-radius: 10px;
+      background: #000;
+      border: 1px solid #333;
+    }
+    .modal-hint {
+      font-size: 11px;
+      color: #aaa;
+      margin-top: 8px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 12px;
+    }
+    .btn-save-share {
+      padding: 10px 18px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn-modal-close {
+      padding: 10px 18px;
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
+  <!-- RGB色味＆明るさを独立してリアルタイム補正するSVGフィルター -->
+  <svg width="0" height="0" style="position:absolute; pointer-events:none;">
+    <defs>
+      <filter id="color-match-filter" color-interpolation-filters="sRGB">
+        <feColorMatrix id="fe-color-matrix" type="matrix"
+          values="1 0 0 0 0
+                  0 1 0 0 0
+                  0 0 1 0 0
+                  0 0 0 1 0" />
+      </filter>
+    </defs>
+  </svg>
+
+  <div id="flash-overlay"></div>
+
+  <div id="top-gauge-container">
+    <div id="gauge-bar"></div>
+  </div>
+
+  <div id="floating-status">カメラを起動中...</div>
+  <div id="zoom-toast">🔍 1.0x</div>
+
+  <!-- 右上の「⚙️」設定開閉ボタン -->
+  <button id="settings-toggle-btn" title="設定を開閉">⚙️</button>
+
+  <!-- 右下の小さな撮影・録画ボタン -->
+  <div id="capture-controls">
+    <div id="rec-timer">● 00:00</div>
+    <button id="snap-btn" class="fab-btn" title="スクリーンショットを保存">📷</button>
+    <button id="rec-btn" class="fab-btn" title="動画を録画開始/停止">🎥</button>
+  </div>
+
+  <!-- 折りたたみ式の設定パネル -->
   <div id="ui-container">
-    <div id="status">カメラとAIモデルを起動中...</div>
+    <div class="panel-header">
+      <span>⚙️ 光学迷彩の設定（2本指ピンチでズーム可）</span>
+      <button id="close-panel-btn" class="close-panel-btn">✖ 閉じる</button>
+    </div>
 
     <div class="btn-row">
-      <button id="capture-now-btn" class="btn-bg" disabled>📸 今すぐ背景を保存</button>
-      <button id="capture-timer-btn" class="btn-timer" disabled>⏱️ 3秒後に背景を保存</button>
-      <button id="switch-cam-btn" class="btn-cam" disabled>🔄 カメラ切替 (現在: イン)</button>
-      <button id="toggle-cloak-btn" class="btn-toggle" disabled>✨ 手動でON/OFF</button>
+      <button id="capture-now-btn" class="action-btn btn-bg" disabled>📸 背景を保存</button>
+      <button id="capture-timer-btn" class="action-btn btn-timer" disabled>⏱️ 3秒後に保存</button>
+      <button id="switch-cam-btn" class="action-btn btn-cam" disabled>🔄 カメラ (イン)</button>
+      <button id="toggle-cloak-btn" class="action-btn btn-toggle" disabled>✨ 手動ON/OFF</button>
     </div>
 
-    <div class="slider-row">
-      <label for="expand-slider">輪郭の拡張（フチ消し幅）: <strong id="expand-val">22</strong>px</label>
-      <input type="range" id="expand-slider" min="4" max="45" value="22">
-      <label style="margin-left: 8px; cursor: pointer;">
-        <input type="checkbox" id="auto-update-chk"> 背景の自動学習を併用
-      </label>
-    </div>
+    <div class="controls-grid">
+      <div class="slider-row">
+        <span>🔍 ズーム: <strong id="zoom-val">1.0</strong>x</span>
+        <button id="zoom-out-btn" class="btn-zoom">ー</button>
+        <input type="range" id="zoom-slider" min="1.0" max="3.0" step="0.05" value="1.0">
+        <button id="zoom-in-btn" class="btn-zoom">＋</button>
+      </div>
 
-    <div id="gauge-container">
-      <div id="gauge-bar"></div>
+      <div class="slider-row">
+        <label for="expand-slider">輪郭の溶け込み幅: <strong id="expand-val">28</strong>px</label>
+        <input type="range" id="expand-slider" min="10" max="55" value="28">
+      </div>
+
+      <div class="slider-row">
+        <label style="cursor: pointer;">
+          <input type="checkbox" id="auto-color-chk" checked> 色味・明るさ自動同化
+        </label>
+        <label style="cursor: pointer; margin-left: 6px;">
+          <input type="checkbox" id="sound-chk" checked> 🔊 効果音
+        </label>
+        <label style="cursor: pointer; margin-left: 6px;">
+          <input type="checkbox" id="guide-chk" checked> 指ガイド
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- 撮影した写真・動画のスマホ保存モーダル -->
+  <div id="media-modal" class="hidden">
+    <div class="modal-card">
+      <div id="modal-title" class="modal-title">✨ 撮影完了！</div>
+      <div id="preview-container"></div>
+      <div id="modal-hint" class="modal-hint">「保存・共有」を押すか、画像を長押しして写真に保存できます</div>
+      <div class="modal-actions">
+        <button id="share-save-btn" class="btn-save-share">📲 スマホに保存・共有</button>
+        <button id="close-modal-btn" class="btn-modal-close">閉じる</button>
+      </div>
     </div>
   </div>
 
@@ -158,29 +482,63 @@
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('output-canvas');
     const ctx = canvas.getContext('2d');
-    const statusTxt = document.getElementById('status');
+    const statusTxt = document.getElementById('floating-status');
+    const zoomToast = document.getElementById('zoom-toast');
     const gaugeBar = document.getElementById('gauge-bar');
+    const feColorMatrix = document.getElementById('fe-color-matrix');
+    const flashOverlay = document.getElementById('flash-overlay');
+
+    const uiContainer = document.getElementById('ui-container');
+    const settingsToggleBtn = document.getElementById('settings-toggle-btn');
+    const closePanelBtn = document.getElementById('close-panel-btn');
+
+    const snapBtn = document.getElementById('snap-btn');
+    const recBtn = document.getElementById('rec-btn');
+    const recTimerTxt = document.getElementById('rec-timer');
+
+    const mediaModal = document.getElementById('media-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const previewContainer = document.getElementById('preview-container');
+    const shareSaveBtn = document.getElementById('share-save-btn');
+    const closeModalBtn = document.getElementById('close-modal-btn');
 
     const captureNowBtn = document.getElementById('capture-now-btn');
     const captureTimerBtn = document.getElementById('capture-timer-btn');
     const switchCamBtn = document.getElementById('switch-cam-btn');
     const toggleCloakBtn = document.getElementById('toggle-cloak-btn');
+
+    const zoomSlider = document.getElementById('zoom-slider');
+    const zoomVal = document.getElementById('zoom-val');
+    const zoomInBtn = document.getElementById('zoom-in-btn');
+    const zoomOutBtn = document.getElementById('zoom-out-btn');
+
     const expandSlider = document.getElementById('expand-slider');
     const expandVal = document.getElementById('expand-val');
-    const autoUpdateChk = document.getElementById('auto-update-chk');
+    const autoColorChk = document.getElementById('auto-color-chk');
+    const soundChk = document.getElementById('sound-chk');
+    const guideChk = document.getElementById('guide-chk');
 
     // オフスクリーンキャンバス群
+    const zoomFrameCanvas = document.createElement('canvas');
+    const zoomFrameCtx = zoomFrameCanvas.getContext('2d');
+
     const cleanBgCanvas = document.createElement('canvas');
     const cleanBgCtx = cleanBgCanvas.getContext('2d');
 
-    const expandedMaskCanvas = document.createElement('canvas');
-    const expandedMaskCtx = expandedMaskCanvas.getContext('2d');
+    const softMaskCanvas = document.createElement('canvas');
+    const softMaskCtx = softMaskCanvas.getContext('2d');
 
     const personCanvas = document.createElement('canvas');
     const personCtx = personCanvas.getContext('2d');
 
-    const bgHoleCanvas = document.createElement('canvas');
-    const bgHoleCtx = bgHoleCanvas.getContext('2d');
+    // 写真保存・動画録画用の「見たままの向き（鏡像反映済み）」キャンバス
+    const exportCanvas = document.createElement('canvas');
+    const exportCtx = exportCanvas.getContext('2d');
+
+    const lumCanvas = document.createElement('canvas');
+    lumCanvas.width = 32;
+    lumCanvas.height = 24;
+    const lumCtx = lumCanvas.getContext('2d', { willReadFrequently: true });
 
     // 状態管理変数
     let currentFacingMode = 'user';
@@ -188,34 +546,504 @@
     let bgCaptured = false;
     let cloakActive = false;
     let cloakAlpha = 0.0;
-    let expandSize = 22;
+
+    let zoomLevel = 1.0;
+    let hwZoomSupported = false;
+    let hwZoomMin = 1.0;
+    let hwZoomMax = 1.0;
+    let zoomToastTimer = null;
+
+    let initialPinchDist = null;
+    let initialPinchZoom = 1.0;
+
+    let expandSize = 28;
+    let bgBaseRGB = { r: 128, g: 128, b: 128 };
+    let smoothScaleRGB = { r: 1.0, g: 1.0, b: 1.0 };
+    let smoothOffsetRGB = { r: 0.0, g: 0.0, b: 0.0 };
 
     let latestMask = null;
     let latestHands = [];
     let isProcessingAI = false;
 
-    // ポーズ継続フレームカウンタ
     let squareHoldFrames = 0;
     let openPalmHoldFrames = 0;
 
-    const FADE_SPEED = 0.03; // じわーっと消える・戻るスピード
+    // 録画管理用の変数
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recStartTime = 0;
+    let recTimerInterval = null;
+    let currentMediaBlob = null;
+    let currentMediaFilename = "";
+    let currentMediaUrl = null;
+
+    const FADE_SPEED = 0.035;
+
+    // =========================================================
+    // 🔊 Web Audio API サウンドシンセサイザー（録画ストリーム連動）
+    // =========================================================
+    let audioCtx = null;
+    let audioDest = null; // 録画ファイルにも効果音を入れるための出力先
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          audioCtx = new AudioContextClass();
+          audioDest = audioCtx.createMediaStreamDestination();
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    // スピーカーと録画用ストリームの両方に音を流すヘルパー
+    function connectToOutputs(node) {
+      if (!audioCtx) return;
+      node.connect(audioCtx.destination);
+      if (audioDest) node.connect(audioDest);
+    }
+
+    window.addEventListener('touchstart', initAudio, { once: true });
+    window.addEventListener('click', initAudio, { once: true });
+
+    // ① 透明化発動音（シュワァァン…）
+    function playCloakOnSound() {
+      if (!soundChk.checked) return;
+      initAudio();
+      if (!audioCtx) return;
+
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const lfo = audioCtx.createOscillator();
+      const lfoGain = audioCtx.createGain();
+      const mainGain = audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(140, now + 0.95);
+
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(14, now);
+      lfoGain.gain.setValueAtTime(35, now);
+
+      lfo.connect(lfoGain);
+      lfoGain.connect(osc.frequency);
+
+      mainGain.gain.setValueAtTime(0.001, now);
+      mainGain.gain.linearRampToValueAtTime(0.25, now + 0.12);
+      mainGain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+
+      osc.connect(mainGain);
+      connectToOutputs(mainGain);
+
+      osc.start(now);
+      lfo.start(now);
+      osc.stop(now + 1.0);
+      lfo.stop(now + 1.0);
+
+      // エアリーノイズ
+      const bufferSize = audioCtx.sampleRate * 0.9;
+      const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const output = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+      const whiteNoise = audioCtx.createBufferSource();
+      whiteNoise.buffer = noiseBuffer;
+
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(2400, now);
+      filter.frequency.exponentialRampToValueAtTime(350, now + 0.9);
+      filter.Q.setValueAtTime(3.0, now);
+
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.setValueAtTime(0.01, now);
+      noiseGain.gain.linearRampToValueAtTime(0.18, now + 0.15);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+
+      whiteNoise.connect(filter);
+      filter.connect(noiseGain);
+      connectToOutputs(noiseGain);
+
+      whiteNoise.start(now);
+      whiteNoise.stop(now + 0.9);
+    }
+
+    // ② 透明化解除音（キラーン！）
+    function playCloakOffSound() {
+      if (!soundChk.checked) return;
+      initAudio();
+      if (!audioCtx) return;
+
+      const now = audioCtx.currentTime;
+      const freqs = [330, 440, 659.25, 880, 1318.5];
+      freqs.forEach((f, idx) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'triangle';
+        const startTime = now + idx * 0.055;
+        osc.frequency.setValueAtTime(f * 0.85, startTime);
+        osc.frequency.exponentialRampToValueAtTime(f, startTime + 0.15);
+
+        gain.gain.setValueAtTime(0.001, startTime);
+        gain.gain.linearRampToValueAtTime(0.14, startTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.55);
+
+        osc.connect(gain);
+        connectToOutputs(gain);
+
+        osc.start(startTime);
+        osc.stop(startTime + 0.55);
+      });
+    }
+
+    // ③ シャッター・ビープ音
+    function playBeepSound(freq = 800, duration = 0.12) {
+      if (!soundChk.checked) return;
+      initAudio();
+      if (!audioCtx) return;
+
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      osc.connect(gain);
+      connectToOutputs(gain);
+
+      osc.start(now);
+      osc.stop(now + duration);
+    }
+
+    // =========================================================
+    // 📷 写真撮影（スクリーンショット）＆ 🎥 動画録画処理
+    // =========================================================
+    function copyToExportCanvas() {
+      const vw = canvas.width;
+      const vh = canvas.height;
+      exportCtx.save();
+      exportCtx.clearRect(0, 0, vw, vh);
+      // インカメラの場合は鏡像反転して見たままの向きで保存する
+      if (currentFacingMode === 'user') {
+        exportCtx.translate(vw, 0);
+        exportCtx.scale(-1, 1);
+      }
+      exportCtx.drawImage(canvas, 0, 0, vw, vh);
+      exportCtx.restore();
+    }
+
+    // 保存・共有モーダルを表示する関数
+    function openSaveModal(blob, filename, isVideo) {
+      if (currentMediaUrl) URL.revokeObjectURL(currentMediaUrl);
+      currentMediaBlob = blob;
+      currentMediaFilename = filename;
+      currentMediaUrl = URL.createObjectURL(blob);
+
+      previewContainer.innerHTML = '';
+      if (isVideo) {
+        modalTitle.innerText = "🎥 動画の録画が完了しました！";
+        const vid = document.createElement('video');
+        vid.src = currentMediaUrl;
+        vid.controls = true;
+        vid.autoplay = true;
+        vid.loop = true;
+        vid.playsInline = true;
+        previewContainer.appendChild(vid);
+      } else {
+        modalTitle.innerText = "📷 写真を撮影しました！";
+        const img = document.createElement('img');
+        img.src = currentMediaUrl;
+        previewContainer.appendChild(img);
+      }
+
+      mediaModal.classList.remove('hidden');
+    }
+
+    // スマホの共有シート（写真に保存）または直接ダウンロードを実行
+    shareSaveBtn.addEventListener('click', async () => {
+      if (!currentMediaBlob) return;
+      const file = new File([currentMediaBlob], currentMediaFilename, { type: currentMediaBlob.type });
+
+      // iPhone / Android のネイティブ共有シート（「ビデオを保存」「画像を保存」が出る）を優先使用
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: '透明マント撮影データ'
+          });
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return; // ユーザーがキャンセルした場合
+        }
+      }
+
+      // PCや非対応ブラウザ向けの直接ダウンロード
+      const a = document.createElement('a');
+      a.href = currentMediaUrl;
+      a.download = currentMediaFilename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+
+    closeModalBtn.addEventListener('click', () => {
+      mediaModal.classList.add('hidden');
+      previewContainer.innerHTML = '';
+    });
+
+    // 📷 写真撮影ボタン
+    snapBtn.addEventListener('click', () => {
+      playBeepSound(1400, 0.08);
+      // フラッシュ演出
+      flashOverlay.style.opacity = '0.85';
+      setTimeout(() => { flashOverlay.style.opacity = '0'; }, 120);
+
+      copyToExportCanvas();
+      exportCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const filename = `invisible_photo_${Date.now()}.png`;
+        openSaveModal(blob, filename, false);
+      }, 'image/png');
+    });
+
+    // 🎥 動画録画ボタン（開始 / 停止）
+    recBtn.addEventListener('click', () => {
+      if (!isRecording) {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    });
+
+    function startRecording() {
+      initAudio();
+      copyToExportCanvas();
+
+      const canvasStream = exportCanvas.captureStream(30); // 30fps映像
+      const combinedTracks = [...canvasStream.getVideoTracks()];
+      // Web Audio APIの効果音トラックも結合
+      if (audioDest && audioDest.stream.getAudioTracks().length > 0) {
+        combinedTracks.push(...audioDest.stream.getAudioTracks());
+      }
+      const combinedStream = new MediaStream(combinedTracks);
+
+      // スマホ（特にiPhone）でそのまま保存しやすい mp4 を優先選択
+      const mimeTypes = [
+        'video/mp4',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm'
+      ];
+      let selectedMime = '';
+      for (const mime of mimeTypes) {
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported(mime)) {
+          selectedMime = mime;
+          break;
+        }
+      }
+
+      try {
+        recordedChunks = [];
+        mediaRecorder = selectedMime
+          ? new MediaRecorder(combinedStream, { mimeType: selectedMime })
+          : new MediaRecorder(combinedStream);
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const mimeType = mediaRecorder.mimeType || 'video/webm';
+          const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+          const blob = new Blob(recordedChunks, { type: mimeType });
+          const filename = `invisible_video_${Date.now()}.${ext}`;
+          openSaveModal(blob, filename, true);
+        };
+
+        mediaRecorder.start(200);
+        isRecording = true;
+        playBeepSound(950, 0.15);
+
+        recBtn.classList.add('recording');
+        recBtn.innerText = '⏹️';
+        recTimerTxt.style.display = 'block';
+        recTimerTxt.innerText = '● 00:00';
+        recStartTime = Date.now();
+
+        recTimerInterval = setInterval(() => {
+          const sec = Math.floor((Date.now() - recStartTime) / 1000);
+          const m = String(Math.floor(sec / 60)).padStart(2, '0');
+          const s = String(sec % 60).padStart(2, '0');
+          recTimerTxt.innerText = `● ${m}:${s}`;
+        }, 500);
+
+      } catch (err) {
+        statusTxt.style.color = "#ff5252";
+        statusTxt.innerText = `録画エラー: ${err.message}`;
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      isRecording = false;
+      clearInterval(recTimerInterval);
+      playBeepSound(600, 0.18);
+
+      recBtn.classList.remove('recording');
+      recBtn.innerText = '🎥';
+      recTimerTxt.style.display = 'none';
+    }
+
+    // =========================================================
+    // 🎨 周囲のRGB色味・明るさをリアルタイム測定＆補正
+    // =========================================================
+    function calcBorderRGB(sourceCanvas) {
+      lumCtx.drawImage(sourceCanvas, 0, 0, 32, 24);
+      const data = lumCtx.getImageData(0, 0, 32, 24).data;
+      let rSum = 0, gSum = 0, bSum = 0, count = 0;
+
+      for (let y = 0; y < 24; y++) {
+        for (let x = 0; x < 32; x++) {
+          if (y < 4 || x < 4 || x >= 28) {
+            const idx = (y * 32 + x) * 4;
+            rSum += data[idx];
+            gSum += data[idx + 1];
+            bSum += data[idx + 2];
+            count++;
+          }
+        }
+      }
+      if (count === 0) return { r: 128, g: 128, b: 128 };
+      return { r: rSum / count, g: gSum / count, b: bSum / count };
+    }
+
+    function toggleSettingsPanel(forceHide) {
+      if (typeof forceHide === 'boolean') {
+        uiContainer.classList.toggle('hidden', forceHide);
+      } else {
+        uiContainer.classList.toggle('hidden');
+      }
+    }
+
+    settingsToggleBtn.addEventListener('click', () => toggleSettingsPanel());
+    closePanelBtn.addEventListener('click', () => toggleSettingsPanel(true));
+
+    function showZoomToast(val) {
+      zoomToast.innerText = `🔍 ${val.toFixed(1)}x`;
+      zoomToast.classList.add('show');
+      if (zoomToastTimer) clearTimeout(zoomToastTimer);
+      zoomToastTimer = setTimeout(() => {
+        zoomToast.classList.remove('show');
+      }, 900);
+    }
+
+    function updateZoom(newZoom, showIndicator = true) {
+      zoomLevel = Math.max(1.0, Math.min(3.0, Math.round(newZoom * 20) / 20));
+      zoomSlider.value = zoomLevel;
+      zoomVal.innerText = zoomLevel.toFixed(1);
+
+      if (showIndicator) showZoomToast(zoomLevel);
+
+      if (hwZoomSupported && currentStream) {
+        const track = currentStream.getVideoTracks()[0];
+        const targetHwZoom = Math.min(hwZoomMax, Math.max(hwZoomMin, zoomLevel));
+        track.applyConstraints({ advanced: [{ zoom: targetHwZoom }] }).catch(() => {});
+      }
+
+      if (bgCaptured) {
+        statusTxt.style.color = "#ffeb3b";
+        statusTxt.innerText = "🔍 画角変更：「⚙️」から背景を保存し直してください";
+      }
+    }
+
+    zoomSlider.addEventListener('input', (e) => updateZoom(parseFloat(e.target.value)));
+    zoomInBtn.addEventListener('click', () => updateZoom(zoomLevel + 0.2));
+    zoomOutBtn.addEventListener('click', () => updateZoom(zoomLevel - 0.2));
+
+    function getTouchDistance(touches) {
+      return Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY
+      );
+    }
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        initialPinchDist = getTouchDistance(e.touches);
+        initialPinchZoom = zoomLevel;
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && initialPinchDist !== null) {
+        e.preventDefault();
+        const currentDist = getTouchDistance(e.touches);
+        const scale = currentDist / initialPinchDist;
+        updateZoom(initialPinchZoom * scale, true);
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) initialPinchDist = null;
+    });
+    canvas.addEventListener('touchcancel', () => {
+      initialPinchDist = null;
+    });
 
     expandSlider.addEventListener('input', (e) => {
       expandSize = parseInt(e.target.value, 10);
       expandVal.innerText = expandSize;
     });
 
+    function lockCameraExposure(lock) {
+      if (!currentStream) return;
+      const track = currentStream.getVideoTracks()[0];
+      if (!track || !track.getCapabilities) return;
+
+      const caps = track.getCapabilities();
+      const advanced = {};
+      if (caps.exposureMode && caps.exposureMode.includes(lock ? 'manual' : 'continuous')) {
+        advanced.exposureMode = lock ? 'manual' : 'continuous';
+      }
+      if (caps.whiteBalanceMode && caps.whiteBalanceMode.includes(lock ? 'manual' : 'continuous')) {
+        advanced.whiteBalanceMode = lock ? 'manual' : 'continuous';
+      }
+      if (Object.keys(advanced).length > 0) {
+        track.applyConstraints({ advanced: [advanced] }).catch(() => {});
+      }
+    }
+
     captureNowBtn.addEventListener('click', () => {
       saveBackgroundNow();
+      toggleSettingsPanel(true);
     });
 
     captureTimerBtn.addEventListener('click', () => {
+      initAudio();
       let count = 3;
       captureNowBtn.disabled = true;
       captureTimerBtn.disabled = true;
+      lockCameraExposure(false);
+      toggleSettingsPanel(true);
+
       const timer = setInterval(() => {
         if (count > 0) {
-          statusTxt.innerText = `⏱️ 背景保存まであと ${count} 秒...（カメラの前から避けてください！）`;
+          playBeepSound(660, 0.1);
+          statusTxt.style.color = "#ffeb3b";
+          statusTxt.innerText = `⏱️ 背景保存まで ${count} 秒...（避けてください）`;
           count--;
         } else {
           clearInterval(timer);
@@ -227,24 +1055,33 @@
     });
 
     function saveBackgroundNow() {
-      cleanBgCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      playBeepSound(1200, 0.22);
+      drawZoomedVideoTo(zoomFrameCtx, canvas.width, canvas.height);
+      cleanBgCtx.drawImage(zoomFrameCanvas, 0, 0, canvas.width, canvas.height);
+
+      bgBaseRGB = calcBorderRGB(cleanBgCanvas);
+      smoothScaleRGB = { r: 1.0, g: 1.0, b: 1.0 };
+      smoothOffsetRGB = { r: 0.0, g: 0.0, b: 0.0 };
+      lockCameraExposure(true);
+
       bgCaptured = true;
       cloakActive = false;
       updateStatusText();
     }
 
     toggleCloakBtn.addEventListener('click', () => {
-      if (!bgCaptured) {
-        saveBackgroundNow();
-      }
+      if (!bgCaptured) saveBackgroundNow();
       cloakActive = !cloakActive;
+      if (cloakActive) playCloakOnSound();
+      else playCloakOffSound();
       updateStatusText();
+      toggleSettingsPanel(true);
     });
 
     switchCamBtn.addEventListener('click', async () => {
       currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
       const camLabel = (currentFacingMode === 'user') ? 'イン' : 'アウト';
-      switchCamBtn.innerText = `🔄 カメラ切替 (現在: ${camLabel})`;
+      switchCamBtn.innerText = `🔄 カメラ (${camLabel})`;
 
       if (currentFacingMode === 'user') {
         canvas.classList.add('mirror');
@@ -255,19 +1092,20 @@
       bgCaptured = false;
       cloakActive = false;
       cloakAlpha = 0.0;
-      statusTxt.innerText = `${camLabel}カメラに切り替えています...`;
+      statusTxt.style.color = "#00e5ff";
+      statusTxt.innerText = `${camLabel}カメラに切替中...`;
       await startCamera(currentFacingMode);
-      statusTxt.innerText = "カメラが切り替わりました。誰もいない状態で「背景を保存」を押してください";
+      statusTxt.innerText = "ピンチ操作で画角を決めて「📸 背景を保存」を押してください";
     });
 
     function updateStatusText() {
       if (!bgCaptured) return;
       if (cloakActive) {
         statusTxt.style.color = "#76ff03";
-        statusTxt.innerText = "✨ 透明化中！解除するには両手を離して「パー（手を開く）」にしてください 🖐️🖐️";
+        statusTxt.innerText = "✨ 透明化中！（解除：両手をパー 🖐️🖐️）";
       } else {
         statusTxt.style.color = "#00e5ff";
-        statusTxt.innerText = "👁️ 通常状態：両手の親指と人差し指で「四角形」を作ると透明になります 🔲";
+        statusTxt.innerText = "👁️ 通常時（透明化：指で四角形 🔲）";
       }
     }
 
@@ -275,31 +1113,18 @@
       return Math.hypot(p1.x - p2.x, p1.y - p2.y);
     }
 
-    // 手が「パー（開いた状態）」かどうかを判定する関数
     function isHandOpen(hand) {
       const wrist = hand[0];
-      // 人差し指(8,6)、中指(12,10)、薬指(16,14)、小指(20,18)の先端と第2関節を比較
-      const fingerPairs = [
-        [8, 6],
-        [12, 10],
-        [16, 14],
-        [20, 18]
-      ];
+      const fingerPairs = [[8, 6], [12, 10], [16, 14], [20, 18]];
       let extendedCount = 0;
       for (const [tipIdx, pipIdx] of fingerPairs) {
-        const tipDist = getDistance(hand[tipIdx], wrist);
-        const pipDist = getDistance(hand[pipIdx], wrist);
-        // 指先の方が手首からしっかり離れていれば「伸びている」と判定
-        if (tipDist > pipDist * 1.12) {
+        if (getDistance(hand[tipIdx], wrist) > getDistance(hand[pipIdx], wrist) * 1.12) {
           extendedCount++;
         }
       }
-      // 親指の先(4)と小指の先(20)がある程度広がっているかも確認
-      const spreadDist = getDistance(hand[4], hand[20]);
-      return extendedCount >= 4 && spreadDist > 0.12;
+      return extendedCount >= 4 && getDistance(hand[4], hand[20]) > 0.12;
     }
 
-    // 1. MediaPipe 人物切り抜き
     const selfieSegmentation = new SelfieSegmentation({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
     });
@@ -308,7 +1133,6 @@
       latestMask = results.segmentationMask;
     });
 
-    // 2. MediaPipe 手の骨格検出
     const hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
@@ -339,66 +1163,94 @@
       video.srcObject = currentStream;
       await video.play();
 
+      hwZoomSupported = false;
+      const track = currentStream.getVideoTracks()[0];
+      if (track && track.getCapabilities) {
+        const caps = track.getCapabilities();
+        if ('zoom' in caps) {
+          hwZoomSupported = true;
+          hwZoomMin = caps.zoom.min || 1.0;
+          hwZoomMax = caps.zoom.max || 3.0;
+        }
+      }
+
       const vw = video.videoWidth || 640;
       const vh = video.videoHeight || 480;
-      [canvas, cleanBgCanvas, expandedMaskCanvas, personCanvas, bgHoleCanvas].forEach(c => {
+      [canvas, zoomFrameCanvas, cleanBgCanvas, softMaskCanvas, personCanvas, exportCanvas].forEach(c => {
         c.width = vw;
         c.height = vh;
       });
+    }
+
+    function drawZoomedVideoTo(targetCtx, vw, vh) {
+      const effectiveCropZoom = hwZoomSupported ? 1.0 : zoomLevel;
+      const sw = vw / effectiveCropZoom;
+      const sh = vh / effectiveCropZoom;
+      const sx = (vw - sw) / 2;
+      const sy = (vh - sh) / 2;
+      targetCtx.drawImage(video, sx, sy, sw, sh, 0, 0, vw, vh);
+    }
+
+    function createSeamlessFeatherMask(sourceMask, vw, vh, radius) {
+      softMaskCtx.clearRect(0, 0, vw, vh);
+
+      const outerBlur = Math.max(14, Math.floor(radius * 1.15));
+      softMaskCtx.filter = `blur(${outerBlur}px)`;
+      const dirs = [
+        [1, 0], [-1, 0], [0, 1], [0, -1],
+        [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]
+      ];
+      for (const [dx, dy] of dirs) {
+        softMaskCtx.drawImage(sourceMask, dx * radius, dy * radius, vw, vh);
+      }
+
+      const innerBlur = Math.max(6, Math.floor(radius * 0.4));
+      softMaskCtx.filter = `blur(${innerBlur}px)`;
+      softMaskCtx.drawImage(sourceMask, 0, 0, vw, vh);
+      softMaskCtx.drawImage(sourceMask, 0, 0, vw, vh);
+
+      softMaskCtx.filter = 'none';
     }
 
     async function init() {
       try {
         await startCamera(currentFacingMode);
 
-        statusTxt.innerText = "AIモデルを準備しています...";
-        await selfieSegmentation.send({ image: video });
-        await hands.send({ image: video });
+        statusTxt.innerText = "AIモデルを準備中...";
+        drawZoomedVideoTo(zoomFrameCtx, canvas.width, canvas.height);
+        await selfieSegmentation.send({ image: zoomFrameCanvas });
+        await hands.send({ image: zoomFrameCanvas });
 
         captureNowBtn.disabled = false;
         captureTimerBtn.disabled = false;
         switchCamBtn.disabled = false;
         toggleCloakBtn.disabled = false;
 
-        statusTxt.innerText = "【ステップ1】誰もいない風景を映し、「背景を保存」を押してください";
+        statusTxt.innerText = "2本指ピンチで画角を決めて「📸 背景を保存」を押してください";
         requestAnimationFrame(renderLoop);
       } catch (err) {
         statusTxt.style.color = "#ff5252";
-        statusTxt.innerText = `カメラ起動エラー: ${err.message}`;
+        statusTxt.innerText = `エラー: ${err.message}`;
       }
-    }
-
-    // 輪郭を広げる膨張マスク生成
-    function createExpandedMask(sourceMask, vw, vh, radius) {
-      expandedMaskCtx.clearRect(0, 0, vw, vh);
-      expandedMaskCtx.filter = `blur(${Math.max(4, Math.floor(radius * 0.6))}px)`;
-
-      expandedMaskCtx.drawImage(sourceMask, 0, 0, vw, vh);
-      const dirs = [
-        [1, 0], [-1, 0], [0, 1], [0, -1],
-        [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]
-      ];
-      for (const [dx, dy] of dirs) {
-        expandedMaskCtx.drawImage(sourceMask, dx * radius, dy * radius, vw, vh);
-      }
-      expandedMaskCtx.filter = 'none';
     }
 
     function renderLoop() {
       const vw = canvas.width;
       const vh = canvas.height;
 
+      drawZoomedVideoTo(zoomFrameCtx, vw, vh);
+
       if (!isProcessingAI && video.readyState >= 2) {
         isProcessingAI = true;
         Promise.all([
-          selfieSegmentation.send({ image: video }),
-          hands.send({ image: video })
+          selfieSegmentation.send({ image: zoomFrameCanvas }),
+          hands.send({ image: zoomFrameCanvas })
         ]).finally(() => {
           isProcessingAI = false;
         });
       }
 
-      // --- ポーズ判定（発動＝指で四角形 / 解除＝両手パー） ---
+      // ポーズ判定（発動＝四角形 / 解除＝両手パー）
       let isSquarePose = false;
       let isOpenPalmPose = false;
 
@@ -406,49 +1258,43 @@
         const h1 = latestHands[0];
         const h2 = latestHands[1];
 
-        const wristDist = getDistance(h1[0], h2[0]); // 手首同士の距離
-        const indexDist = getDistance(h1[8], h2[8]); // 人差し指同士の距離
-
+        const wristDist = getDistance(h1[0], h2[0]);
+        const indexDist = getDistance(h1[8], h2[8]);
         const cross1 = getDistance(h1[4], h2[8]);
         const cross2 = getDistance(h1[8], h2[4]);
         const para1 = getDistance(h1[4], h2[4]);
         const para2 = getDistance(h1[8], h2[8]);
 
-        // 【発動条件：指で四角形】
-        // 親指と人差し指の先がくっついている
         const fingerTh = 0.15;
         if ((cross1 < fingerTh && cross2 < fingerTh) || (para1 < fingerTh && para2 < fingerTh)) {
           isSquarePose = true;
         }
 
-        // 【解除条件：両手を広げてパー】
-        // 両手とも5本指が開いており、かつ四角形ポーズではない（両手の人差し指がしっかり離れている）
         if (isHandOpen(h1) && isHandOpen(h2) && indexDist > 0.18 && wristDist > 0.20) {
           isOpenPalmPose = true;
         }
       }
 
-      // 状態に応じたアクション切り替え
       if (bgCaptured) {
         if (!cloakActive) {
-          // 通常時：四角形ポーズで透明化ON
           if (isSquarePose) {
             squareHoldFrames++;
             if (squareHoldFrames > 5) {
               cloakActive = true;
               squareHoldFrames = 0;
+              playCloakOnSound();
               updateStatusText();
             }
           } else {
             squareHoldFrames = Math.max(0, squareHoldFrames - 1);
           }
         } else {
-          // 透明時：両手パーで透明化OFF（解除）
           if (isOpenPalmPose) {
             openPalmHoldFrames++;
             if (openPalmHoldFrames > 5) {
               cloakActive = false;
               openPalmHoldFrames = 0;
+              playCloakOffSound();
               updateStatusText();
             }
           } else {
@@ -457,7 +1303,6 @@
         }
       }
 
-      // 透明度のアニメーション更新（じわーっと変化）
       if (cloakActive && bgCaptured) {
         cloakAlpha = Math.min(1.0, cloakAlpha + FADE_SPEED);
       } else {
@@ -465,35 +1310,82 @@
       }
       gaugeBar.style.width = `${cloakAlpha * 100}%`;
 
-      // --- 拡張マスク生成と背景の描画 ---
-      if (latestMask && bgCaptured) {
-        createExpandedMask(latestMask, vw, vh, expandSize);
-
-        if (autoUpdateChk.checked) {
-          bgHoleCtx.clearRect(0, 0, vw, vh);
-          bgHoleCtx.drawImage(video, 0, 0, vw, vh);
-          bgHoleCtx.globalCompositeOperation = 'destination-out';
-          bgHoleCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
-          bgHoleCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
-          bgHoleCtx.globalCompositeOperation = 'source-over';
-
-          cleanBgCtx.drawImage(bgHoleCanvas, 0, 0, vw, vh);
-        }
-      }
-
-      // --- メイン画面の描画 ---
+      // メイン画面の描画
       ctx.clearRect(0, 0, vw, vh);
-      ctx.drawImage(video, 0, 0, vw, vh);
+      ctx.drawImage(zoomFrameCanvas, 0, 0, vw, vh);
 
       if (cloakAlpha > 0.01 && latestMask && bgCaptured) {
+        createSeamlessFeatherMask(latestMask, vw, vh, expandSize);
+
         personCtx.clearRect(0, 0, vw, vh);
-
-        personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
-        personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
-        personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
-
+        personCtx.drawImage(softMaskCanvas, 0, 0, vw, vh);
         personCtx.globalCompositeOperation = 'source-in';
+
+        if (autoColorChk.checked) {
+          const curRGB = calcBorderRGB(zoomFrameCanvas);
+
+          const targetR = Math.max(0.6, Math.min(1.5, curRGB.r / Math.max(15, bgBaseRGB.r)));
+          const targetG = Math.max(0.6, Math.min(1.5, curRGB.g / Math.max(15, bgBaseRGB.g)));
+          const targetB = Math.max(0.6, Math.min(1.5, curRGB.b / Math.max(15, bgBaseRGB.b)));
+
+          smoothScaleRGB.r = smoothScaleRGB.r * 0.85 + targetR * 0.15;
+          smoothScaleRGB.g = smoothScaleRGB.g * 0.85 + targetG * 0.15;
+          smoothScaleRGB.b = smoothScaleRGB.b * 0.85 + targetB * 0.15;
+
+          const offR = Math.max(-0.15, Math.min(0.15, (curRGB.r - bgBaseRGB.r * smoothScaleRGB.r) / 255));
+          const offG = Math.max(-0.15, Math.min(0.15, (curRGB.g - bgBaseRGB.g * smoothScaleRGB.g) / 255));
+          const offB = Math.max(-0.15, Math.min(0.15, (curRGB.b - bgBaseRGB.b * smoothScaleRGB.b) / 255));
+
+          smoothOffsetRGB.r = smoothOffsetRGB.r * 0.85 + offR * 0.15;
+          smoothOffsetRGB.g = smoothOffsetRGB.g * 0.85 + offG * 0.15;
+          smoothOffsetRGB.b = smoothOffsetRGB.b * 0.85 + offB * 0.15;
+
+          const matrixStr = `
+            ${smoothScaleRGB.r.toFixed(3)} 0 0 0 ${smoothOffsetRGB.r.toFixed(3)}
+            0 ${smoothScaleRGB.g.toFixed(3)} 0 0 ${smoothOffsetRGB.g.toFixed(3)}
+            0 0 ${smoothScaleRGB.b.toFixed(3)} 0 ${smoothOffsetRGB.b.toFixed(3)}
+            0 0 0 1 0
+          `;
+          feColorMatrix.setAttribute('values', matrixStr);
+
+          const avgBrightness = Math.round(((smoothScaleRGB.r + smoothScaleRGB.g + smoothScaleRGB.b) / 3) * 100);
+          personCtx.filter = `url(#color-match-filter) brightness(100%)`;
+          if (!personCtx.filter || personCtx.filter === 'none') {
+            personCtx.filter = `brightness(${avgBrightness}%)`;
+          }
+        } else {
+          personCtx.filter = 'none';
+        }
+
         personCtx.drawImage(cleanBgCanvas, 0, 0, vw, vh);
+        personCtx.filter = 'none';
+
+        if (autoColorChk.checked) {
+          const rDiff = Math.round((smoothScaleRGB.r - 1.0) * 128 + smoothOffsetRGB.r * 255);
+          const gDiff = Math.round((smoothScaleRGB.g - 1.0) * 128 + smoothOffsetRGB.g * 255);
+          const bDiff = Math.round((smoothScaleRGB.b - 1.0) * 128 + smoothOffsetRGB.b * 255);
+
+          if (Math.abs(rDiff) > 2 || Math.abs(gDiff) > 2 || Math.abs(bDiff) > 2) {
+            personCtx.save();
+            personCtx.globalCompositeOperation = 'source-atop';
+            const lumaShift = (rDiff * 0.3 + gDiff * 0.59 + bDiff * 0.11);
+            if (lumaShift > 0) {
+              personCtx.fillStyle = `rgba(255, 255, 255, ${Math.min(0.35, lumaShift / 255)})`;
+            } else {
+              personCtx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.35, -lumaShift / 255)})`;
+            }
+            personCtx.fillRect(0, 0, vw, vh);
+
+            const tintR = Math.max(0, Math.min(255, 128 + (rDiff - lumaShift) * 2));
+            const tintG = Math.max(0, Math.min(255, 128 + (gDiff - lumaShift) * 2));
+            const tintB = Math.max(0, Math.min(255, 128 + (bDiff - lumaShift) * 2));
+            personCtx.globalCompositeOperation = 'overlay';
+            personCtx.fillStyle = `rgba(${Math.round(tintR)}, ${Math.round(tintG)}, ${Math.round(tintB)}, 0.25)`;
+            personCtx.fillRect(0, 0, vw, vh);
+            personCtx.restore();
+          }
+        }
+
         personCtx.globalCompositeOperation = 'source-over';
 
         ctx.save();
@@ -502,11 +1394,10 @@
         ctx.restore();
       }
 
-      // --- 手の認識ガイド表示 ---
-      if (latestHands.length > 0) {
+      // 指ガイド表示
+      if (guideChk.checked && latestHands.length > 0) {
         ctx.save();
         if (!cloakActive) {
-          // 通常時：親指と人差し指に水色のドット（四角形成立で緑）
           for (const hand of latestHands) {
             [4, 8].forEach(idx => {
               const pt = hand[idx];
@@ -517,16 +1408,20 @@
             });
           }
         } else {
-          // 透明時：両手パーの認識がわかるよう、手のひら中央(9)に小さなガイドを表示
           for (const hand of latestHands) {
             const pt = hand[9];
             ctx.beginPath();
             ctx.arc(pt.x * vw, pt.y * vh, 8, 0, Math.PI * 2);
-            ctx.fillStyle = isOpenPalmPose ? '#76ff03' : 'rgba(255, 152, 0, 0.6)';
+            ctx.fillStyle = isOpenPalmPose ? '#76ff03' : 'rgba(255, 152, 0, 0.5)';
             ctx.fill();
           }
         }
         ctx.restore();
+      }
+
+      // 動画録画中は毎フレーム exportCanvas にも見たままの映像を転送する
+      if (isRecording) {
+        copyToExportCanvas();
       }
 
       requestAnimationFrame(renderLoop);
