@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>光学迷彩・透明マント（撮影＆録画対応版）</title>
+  <title>光学迷彩・透明マント（顔だけ残すモード搭載版）</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -43,7 +44,6 @@
       display: none;
     }
 
-    /* 写真撮影時のフラッシュ演出 */
     #flash-overlay {
       position: absolute;
       top: 0;
@@ -120,7 +120,6 @@
       box-shadow: 0 0 8px #76ff03;
     }
 
-    /* 右上の「⚙️」設定開閉ボタン */
     #settings-toggle-btn {
       position: absolute;
       top: max(10px, env(safe-area-inset-top));
@@ -147,7 +146,6 @@
       transform: scale(0.92);
     }
 
-    /* 右下の撮影・録画フローティングボタン群 */
     #capture-controls {
       position: absolute;
       bottom: max(18px, env(safe-area-inset-bottom));
@@ -189,7 +187,6 @@
     .fab-btn:active {
       transform: scale(0.9);
     }
-    /* 録画中の赤い点滅スタイル */
     .fab-btn.recording {
       background: rgba(220, 20, 20, 0.85);
       border-color: #ff8a80;
@@ -201,7 +198,6 @@
       100% { box-shadow: 0 0 0 0 rgba(255, 50, 50, 0); }
     }
 
-    /* 折りたたみ可能な設定パネル */
     #ui-container {
       position: absolute;
       top: calc(max(10px, env(safe-area-inset-top)) + 50px);
@@ -307,8 +303,15 @@
       accent-color: #00e5ff;
       cursor: pointer;
     }
+    .highlight-toggle {
+      background: rgba(138, 43, 226, 0.25);
+      border: 1px solid rgba(186, 85, 211, 0.5);
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: #ffeb3b;
+      font-weight: bold;
+    }
 
-    /* スマホで保存しやすくするプレビュー＆保存モーダル */
     #media-modal {
       position: absolute;
       top: 0;
@@ -411,17 +414,14 @@
   <div id="floating-status">カメラを起動中...</div>
   <div id="zoom-toast">🔍 1.0x</div>
 
-  <!-- 右上の「⚙️」設定開閉ボタン -->
   <button id="settings-toggle-btn" title="設定を開閉">⚙️</button>
 
-  <!-- 右下の小さな撮影・録画ボタン -->
   <div id="capture-controls">
     <div id="rec-timer">● 00:00</div>
     <button id="snap-btn" class="fab-btn" title="スクリーンショットを保存">📷</button>
     <button id="rec-btn" class="fab-btn" title="動画を録画開始/停止">🎥</button>
   </div>
 
-  <!-- 折りたたみ式の設定パネル -->
   <div id="ui-container">
     <div class="panel-header">
       <span>⚙️ 光学迷彩の設定（2本指ピンチでズーム可）</span>
@@ -448,6 +448,13 @@
         <input type="range" id="expand-slider" min="10" max="55" value="28">
       </div>
 
+      <!-- 顔だけ残すモード（ハリー・ポッター風）切り替えスイッチ -->
+      <div class="slider-row">
+        <label class="highlight-toggle" style="cursor: pointer;">
+          <input type="checkbox" id="floating-head-chk"> 🧙‍♂️ 顔だけ残すモード（体だけ透明）
+        </label>
+      </div>
+
       <div class="slider-row">
         <label style="cursor: pointer;">
           <input type="checkbox" id="auto-color-chk" checked> 色味・明るさ自動同化
@@ -462,7 +469,6 @@
     </div>
   </div>
 
-  <!-- 撮影した写真・動画のスマホ保存モーダル -->
   <div id="media-modal" class="hidden">
     <div class="modal-card">
       <div id="modal-title" class="modal-title">✨ 撮影完了！</div>
@@ -514,6 +520,7 @@
 
     const expandSlider = document.getElementById('expand-slider');
     const expandVal = document.getElementById('expand-val');
+    const floatingHeadChk = document.getElementById('floating-head-chk');
     const autoColorChk = document.getElementById('auto-color-chk');
     const soundChk = document.getElementById('sound-chk');
     const guideChk = document.getElementById('guide-chk');
@@ -531,7 +538,6 @@
     const personCanvas = document.createElement('canvas');
     const personCtx = personCanvas.getContext('2d');
 
-    // 写真保存・動画録画用の「見たままの向き（鏡像反映済み）」キャンバス
     const exportCanvas = document.createElement('canvas');
     const exportCtx = exportCanvas.getContext('2d');
 
@@ -563,12 +569,12 @@
 
     let latestMask = null;
     let latestHands = [];
+    let latestFaces = [];
     let isProcessingAI = false;
 
     let squareHoldFrames = 0;
     let openPalmHoldFrames = 0;
 
-    // 録画管理用の変数
     let isRecording = false;
     let mediaRecorder = null;
     let recordedChunks = [];
@@ -581,10 +587,10 @@
     const FADE_SPEED = 0.035;
 
     // =========================================================
-    // 🔊 Web Audio API サウンドシンセサイザー（録画ストリーム連動）
+    // 🔊 Web Audio API サウンドシンセサイザー
     // =========================================================
     let audioCtx = null;
-    let audioDest = null; // 録画ファイルにも効果音を入れるための出力先
+    let audioDest = null;
 
     function initAudio() {
       if (!audioCtx) {
@@ -599,7 +605,6 @@
       }
     }
 
-    // スピーカーと録画用ストリームの両方に音を流すヘルパー
     function connectToOutputs(node) {
       if (!audioCtx) return;
       node.connect(audioCtx.destination);
@@ -609,7 +614,6 @@
     window.addEventListener('touchstart', initAudio, { once: true });
     window.addEventListener('click', initAudio, { once: true });
 
-    // ① 透明化発動音（シュワァァン…）
     function playCloakOnSound() {
       if (!soundChk.checked) return;
       initAudio();
@@ -644,7 +648,6 @@
       osc.stop(now + 1.0);
       lfo.stop(now + 1.0);
 
-      // エアリーノイズ
       const bufferSize = audioCtx.sampleRate * 0.9;
       const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
       const output = noiseBuffer.getChannelData(0);
@@ -673,7 +676,6 @@
       whiteNoise.stop(now + 0.9);
     }
 
-    // ② 透明化解除音（キラーン！）
     function playCloakOffSound() {
       if (!soundChk.checked) return;
       initAudio();
@@ -702,7 +704,6 @@
       });
     }
 
-    // ③ シャッター・ビープ音
     function playBeepSound(freq = 800, duration = 0.12) {
       if (!soundChk.checked) return;
       initAudio();
@@ -726,14 +727,13 @@
     }
 
     // =========================================================
-    // 📷 写真撮影（スクリーンショット）＆ 🎥 動画録画処理
+    // 📷 写真撮影 ＆ 🎥 動画録画処理
     // =========================================================
     function copyToExportCanvas() {
       const vw = canvas.width;
       const vh = canvas.height;
       exportCtx.save();
       exportCtx.clearRect(0, 0, vw, vh);
-      // インカメラの場合は鏡像反転して見たままの向きで保存する
       if (currentFacingMode === 'user') {
         exportCtx.translate(vw, 0);
         exportCtx.scale(-1, 1);
@@ -742,7 +742,6 @@
       exportCtx.restore();
     }
 
-    // 保存・共有モーダルを表示する関数
     function openSaveModal(blob, filename, isVideo) {
       if (currentMediaUrl) URL.revokeObjectURL(currentMediaUrl);
       currentMediaBlob = blob;
@@ -769,12 +768,10 @@
       mediaModal.classList.remove('hidden');
     }
 
-    // スマホの共有シート（写真に保存）または直接ダウンロードを実行
     shareSaveBtn.addEventListener('click', async () => {
       if (!currentMediaBlob) return;
       const file = new File([currentMediaBlob], currentMediaFilename, { type: currentMediaBlob.type });
 
-      // iPhone / Android のネイティブ共有シート（「ビデオを保存」「画像を保存」が出る）を優先使用
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
@@ -783,11 +780,10 @@
           });
           return;
         } catch (err) {
-          if (err.name === 'AbortError') return; // ユーザーがキャンセルした場合
+          if (err.name === 'AbortError') return;
         }
       }
 
-      // PCや非対応ブラウザ向けの直接ダウンロード
       const a = document.createElement('a');
       a.href = currentMediaUrl;
       a.download = currentMediaFilename;
@@ -801,10 +797,8 @@
       previewContainer.innerHTML = '';
     });
 
-    // 📷 写真撮影ボタン
     snapBtn.addEventListener('click', () => {
       playBeepSound(1400, 0.08);
-      // フラッシュ演出
       flashOverlay.style.opacity = '0.85';
       setTimeout(() => { flashOverlay.style.opacity = '0'; }, 120);
 
@@ -816,28 +810,22 @@
       }, 'image/png');
     });
 
-    // 🎥 動画録画ボタン（開始 / 停止）
     recBtn.addEventListener('click', () => {
-      if (!isRecording) {
-        startRecording();
-      } else {
-        stopRecording();
-      }
+      if (!isRecording) startRecording();
+      else stopRecording();
     });
 
     function startRecording() {
       initAudio();
       copyToExportCanvas();
 
-      const canvasStream = exportCanvas.captureStream(30); // 30fps映像
+      const canvasStream = exportCanvas.captureStream(30);
       const combinedTracks = [...canvasStream.getVideoTracks()];
-      // Web Audio APIの効果音トラックも結合
       if (audioDest && audioDest.stream.getAudioTracks().length > 0) {
         combinedTracks.push(...audioDest.stream.getAudioTracks());
       }
       const combinedStream = new MediaStream(combinedTracks);
 
-      // スマホ（特にiPhone）でそのまま保存しやすい mp4 を優先選択
       const mimeTypes = [
         'video/mp4',
         'video/webm;codecs=vp9,opus',
@@ -1008,6 +996,10 @@
       expandVal.innerText = expandSize;
     });
 
+    floatingHeadChk.addEventListener('change', () => {
+      updateStatusText();
+    });
+
     function lockCameraExposure(lock) {
       if (!currentStream) return;
       const track = currentStream.getVideoTracks()[0];
@@ -1100,12 +1092,13 @@
 
     function updateStatusText() {
       if (!bgCaptured) return;
+      const headTag = floatingHeadChk.checked ? "【🧙‍♂️顔残し】" : "";
       if (cloakActive) {
         statusTxt.style.color = "#76ff03";
-        statusTxt.innerText = "✨ 透明化中！（解除：両手をパー 🖐️🖐️）";
+        statusTxt.innerText = `✨ ${headTag}透明化中！（解除：両手をパー 🖐️🖐️）`;
       } else {
         statusTxt.style.color = "#00e5ff";
-        statusTxt.innerText = "👁️ 通常時（透明化：指で四角形 🔲）";
+        statusTxt.innerText = `👁️ ${headTag}通常時（透明化：指で四角形 🔲）`;
       }
     }
 
@@ -1125,6 +1118,7 @@
       return extendedCount >= 4 && getDistance(hand[4], hand[20]) > 0.12;
     }
 
+    // 1. MediaPipe 人物切り抜き
     const selfieSegmentation = new SelfieSegmentation({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
     });
@@ -1133,6 +1127,7 @@
       latestMask = results.segmentationMask;
     });
 
+    // 2. MediaPipe 手の骨格検出
     const hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
@@ -1144,6 +1139,18 @@
     });
     hands.onResults((results) => {
       latestHands = results.multiHandLandmarks || [];
+    });
+
+    // 3. MediaPipe 顔検出（顔だけ残すモード用）
+    const faceDetection = new FaceDetection({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
+    });
+    faceDetection.setOptions({
+      model: 'short',
+      minDetectionConfidence: 0.5
+    });
+    faceDetection.onResults((results) => {
+      latestFaces = results.detections || [];
     });
 
     async function startCamera(facingMode) {
@@ -1209,6 +1216,30 @@
       softMaskCtx.drawImage(sourceMask, 0, 0, vw, vh);
       softMaskCtx.drawImage(sourceMask, 0, 0, vw, vh);
 
+      // 🧙‍♂️ 顔だけ残すモードがONの場合、検出された顔（頭部）を透明化マスクからくり抜いて実体化させる
+      if (floatingHeadChk.checked && latestFaces.length > 0) {
+        softMaskCtx.save();
+        softMaskCtx.globalCompositeOperation = 'destination-out';
+        softMaskCtx.filter = 'blur(10px)'; // 首元の境界を自然にぼかす
+        softMaskCtx.fillStyle = '#000';
+
+        for (const det of latestFaces) {
+          const box = det.boundingBox;
+          if (!box) continue;
+          const cx = box.xCenter * vw;
+          // 髪の毛・頭頂部までしっかり残るように中心を少し上にオフセット
+          const cy = (box.yCenter - box.height * 0.12) * vh;
+          const rx = (box.width * vw) * 0.68;
+          const ry = (box.height * vh) * 0.82;
+
+          softMaskCtx.beginPath();
+          softMaskCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          softMaskCtx.fill();
+          softMaskCtx.fill(); // 2回重ねて顔の中心部が透けないようにする
+        }
+        softMaskCtx.restore();
+      }
+
       softMaskCtx.filter = 'none';
     }
 
@@ -1220,6 +1251,7 @@
         drawZoomedVideoTo(zoomFrameCtx, canvas.width, canvas.height);
         await selfieSegmentation.send({ image: zoomFrameCanvas });
         await hands.send({ image: zoomFrameCanvas });
+        await faceDetection.send({ image: zoomFrameCanvas });
 
         captureNowBtn.disabled = false;
         captureTimerBtn.disabled = false;
@@ -1242,10 +1274,15 @@
 
       if (!isProcessingAI && video.readyState >= 2) {
         isProcessingAI = true;
-        Promise.all([
+        const tasks = [
           selfieSegmentation.send({ image: zoomFrameCanvas }),
           hands.send({ image: zoomFrameCanvas })
-        ]).finally(() => {
+        ];
+        // 顔だけ残すモードがONの時だけ顔検出AIも並列実行して負荷を抑える
+        if (floatingHeadChk.checked) {
+          tasks.push(faceDetection.send({ image: zoomFrameCanvas }));
+        }
+        Promise.all(tasks).finally(() => {
           isProcessingAI = false;
         });
       }
@@ -1419,7 +1456,6 @@
         ctx.restore();
       }
 
-      // 動画録画中は毎フレーム exportCanvas にも見たままの映像を転送する
       if (isRecording) {
         copyToExportCanvas();
       }
