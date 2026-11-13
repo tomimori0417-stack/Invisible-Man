@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>光学迷彩・透明マント（タブレット対応版）</title>
+  <title>光学迷彩・透明マント（四角形で発動／合掌で解除）</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <style>
@@ -88,6 +88,7 @@
       background: rgba(255,255,255,0.06);
       padding: 6px 12px;
       border-radius: 6px;
+      flex-wrap: wrap;
     }
     input[type="range"] {
       width: 140px;
@@ -117,7 +118,6 @@
       margin-top: 10px;
       margin-bottom: 20px;
     }
-    /* インカメラの時だけ鏡のように左右反転するクラス */
     canvas.mirror {
       transform: scaleX(-1);
     }
@@ -135,14 +135,14 @@
       <button id="capture-now-btn" class="btn-bg" disabled>📸 今すぐ背景を保存</button>
       <button id="capture-timer-btn" class="btn-timer" disabled>⏱️ 3秒後に背景を保存</button>
       <button id="switch-cam-btn" class="btn-cam" disabled>🔄 カメラ切替 (現在: イン)</button>
-      <button id="toggle-cloak-btn" class="btn-toggle" disabled>✨ 手動で透明ON/OFF</button>
+      <button id="toggle-cloak-btn" class="btn-toggle" disabled>✨ 手動でON/OFF</button>
     </div>
 
     <div class="slider-row">
-      <label for="expand-slider">輪郭の拡張（フチ消し幅）: <strong id="expand-val">18</strong>px</label>
-      <input type="range" id="expand-slider" min="4" max="40" value="18">
+      <label for="expand-slider">輪郭の拡張（フチ消し幅）: <strong id="expand-val">22</strong>px</label>
+      <input type="range" id="expand-slider" min="4" max="45" value="22">
       <label style="margin-left: 8px; cursor: pointer;">
-        <input type="checkbox" id="auto-update-chk" checked> 背景の自動学習を併用
+        <input type="checkbox" id="auto-update-chk"> 背景の自動学習を併用
       </label>
     </div>
 
@@ -169,47 +169,46 @@
     const expandVal = document.getElementById('expand-val');
     const autoUpdateChk = document.getElementById('auto-update-chk');
 
-    // オフスクリーンキャンバス
-    const cleanBgCanvas = document.createElement('canvas'); // 保存された背景画像
+    // オフスクリーンキャンバス群
+    const cleanBgCanvas = document.createElement('canvas');
     const cleanBgCtx = cleanBgCanvas.getContext('2d');
 
-    const expandedMaskCanvas = document.createElement('canvas'); // 輪郭を大きく広げたマスク用
+    const expandedMaskCanvas = document.createElement('canvas');
     const expandedMaskCtx = expandedMaskCanvas.getContext('2d');
 
-    const personCanvas = document.createElement('canvas'); // 人物シルエット合成用
+    const personCanvas = document.createElement('canvas');
     const personCtx = personCanvas.getContext('2d');
 
-    const bgHoleCanvas = document.createElement('canvas'); // 自動背景更新用（人間以外を切り抜く）
+    const bgHoleCanvas = document.createElement('canvas');
     const bgHoleCtx = bgHoleCanvas.getContext('2d');
 
     // 状態管理変数
-    let currentFacingMode = 'user'; // 'user'(インカメラ) または 'environment'(アウトカメラ)
+    let currentFacingMode = 'user';
     let currentStream = null;
     let bgCaptured = false;
     let cloakActive = false;
     let cloakAlpha = 0.0;
-    let expandSize = 18; // 輪郭を広げるピクセル幅
+    let expandSize = 22; // 初期値を22pxに広げて輪郭のフチ残りをしっかり防止
 
     let latestMask = null;
     let latestHands = [];
     let isProcessingAI = false;
-    let poseHoldFrames = 0;
-    let cooldownFrames = 0;
 
-    const FADE_SPEED = 0.03; // じわーっと消えるスピード
+    // ポーズ継続フレームカウンタ（誤認識防止用）
+    let squareHoldFrames = 0;
+    let prayHoldFrames = 0;
 
-    // スライダーで輪郭の拡張サイズを変更
+    const FADE_SPEED = 0.03; // じわーっと消える・戻るスピード
+
     expandSlider.addEventListener('input', (e) => {
       expandSize = parseInt(e.target.value, 10);
       expandVal.innerText = expandSize;
     });
 
-    // 今すぐ背景を保存
     captureNowBtn.addEventListener('click', () => {
       saveBackgroundNow();
     });
 
-    // 3秒タイマーで背景を保存
     captureTimerBtn.addEventListener('click', () => {
       let count = 3;
       captureNowBtn.disabled = true;
@@ -230,24 +229,23 @@
     function saveBackgroundNow() {
       cleanBgCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
       bgCaptured = true;
-      statusTxt.innerText = "✅ 背景を保存しました！両手で「四角形」を作ると透明になります";
+      cloakActive = false;
+      updateStatusText();
     }
 
-    // 手動で透明ON/OFF切替
     toggleCloakBtn.addEventListener('click', () => {
       if (!bgCaptured) {
         saveBackgroundNow();
       }
       cloakActive = !cloakActive;
+      updateStatusText();
     });
 
-    // インカメラ / アウトカメラ切替
     switchCamBtn.addEventListener('click', async () => {
       currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
       const camLabel = (currentFacingMode === 'user') ? 'イン' : 'アウト';
       switchCamBtn.innerText = `🔄 カメラ切替 (現在: ${camLabel})`;
 
-      // インカメラの時は鏡表示、アウトカメラの時は正像表示
       if (currentFacingMode === 'user') {
         canvas.classList.add('mirror');
       } else {
@@ -261,6 +259,17 @@
       await startCamera(currentFacingMode);
       statusTxt.innerText = "カメラが切り替わりました。誰もいない状態で「背景を保存」を押してください";
     });
+
+    function updateStatusText() {
+      if (!bgCaptured) return;
+      if (cloakActive) {
+        statusTxt.style.color = "#76ff03";
+        statusTxt.innerText = "✨ 透明化中！解除するには胸の前で「合掌（両手を合わせる）」してください 🙏";
+      } else {
+        statusTxt.style.color = "#00e5ff";
+        statusTxt.innerText = "👁️ 通常状態：両手の親指と人差し指で「四角形」を作ると透明になります 🔲";
+      }
+    }
 
     function getDistance(p1, p2) {
       return Math.hypot(p1.x - p2.x, p1.y - p2.y);
@@ -289,7 +298,6 @@
       latestHands = results.multiHandLandmarks || [];
     });
 
-    // カメラストリームの起動・再起動
     async function startCamera(facingMode) {
       if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
@@ -336,13 +344,11 @@
       }
     }
 
-    // 人物マスクの輪郭をグッと広げる関数（体のフチが残るのを防ぐ）
+    // 輪郭を広げる膨張マスク生成
     function createExpandedMask(sourceMask, vw, vh, radius) {
       expandedMaskCtx.clearRect(0, 0, vw, vh);
-      // ぼかしをかけて一回り大きくする
       expandedMaskCtx.filter = `blur(${Math.max(4, Math.floor(radius * 0.6))}px)`;
 
-      // 中心と周囲8方向にずらして重ね描きし、マスク領域を確実に太らせる（膨張処理）
       expandedMaskCtx.drawImage(sourceMask, 0, 0, vw, vh);
       const dirs = [
         [1, 0], [-1, 0], [0, 1], [0, -1],
@@ -358,7 +364,6 @@
       const vw = canvas.width;
       const vh = canvas.height;
 
-      // AI推論を非同期実行
       if (!isProcessingAI && video.readyState >= 2) {
         isProcessingAI = true;
         Promise.all([
@@ -369,38 +374,65 @@
         });
       }
 
-      // --- 四角形ポーズの判定 ---
-      let isPoseNow = false;
+      // --- ポーズ判定（発動＝四角形 / 解除＝合掌） ---
+      let isSquarePose = false;
+      let isPrayPose = false;
+
       if (latestHands.length >= 2) {
         const h1 = latestHands[0];
         const h2 = latestHands[1];
 
-        const cross1 = getDistance(h1[4], h2[8]);
-        const cross2 = getDistance(h1[8], h2[4]);
-        const para1 = getDistance(h1[4], h2[4]);
-        const para2 = getDistance(h1[8], h2[8]);
+        // 各部位の距離を計算
+        const wristDist = getDistance(h1[0], h2[0]);      // 手首(0)同士の距離
+        const palmDist = getDistance(h1[9], h2[9]);       // 手のひら中央(9)同士の距離
+        const midTipDist = getDistance(h1[12], h2[12]);   // 中指の先(12)同士の距離
 
-        const th = 0.16;
-        if ((cross1 < th && cross2 < th) || (para1 < th && para2 < th)) {
-          isPoseNow = true;
+        const cross1 = getDistance(h1[4], h2[8]);         // 手1親指 - 手2人差し指
+        const cross2 = getDistance(h1[8], h2[4]);         // 手1人差し指 - 手2親指
+        const para1 = getDistance(h1[4], h2[4]);          // 親指同士
+        const para2 = getDistance(h1[8], h2[8]);          // 人差し指同士
+
+        // 【発動条件：指で四角形】
+        // 親指と人差し指の先が近く、かつ「手首同士がしっかり離れている（合掌ではない）」
+        const fingerTh = 0.15;
+        if (((cross1 < fingerTh && cross2 < fingerTh) || (para1 < fingerTh && para2 < fingerTh)) && wristDist > 0.16) {
+          isSquarePose = true;
+        }
+
+        // 【解除条件：胸の前で合掌】
+        // 左右の「手首」「手のひら中央」「中指の先」がすべてピタッとくっついている
+        if (wristDist < 0.15 && palmDist < 0.12 && midTipDist < 0.12) {
+          isPrayPose = true;
         }
       }
 
-      if (cooldownFrames > 0) cooldownFrames--;
-
-      // 背景保存後に四角形ポーズをとったら透明化ON/OFFをトグル
-      if (bgCaptured && isPoseNow && cooldownFrames === 0) {
-        poseHoldFrames++;
-        if (poseHoldFrames > 6) {
-          cloakActive = !cloakActive;
-          poseHoldFrames = 0;
-          cooldownFrames = 45; // 1.5秒間は連続切替を防止
-          statusTxt.innerText = cloakActive
-            ? "✨ 光学迷彩発動中！（もう一度ポーズをとるかボタンで解除）"
-            : "解除しました。四角形ポーズで再び透明になります";
+      // 状態に応じたアクション切り替え（専用ポーズでのみ変化するため、動いても勝手に戻らない）
+      if (bgCaptured) {
+        if (!cloakActive) {
+          // 現在が「通常状態」なら、四角形ポーズだけを待つ
+          if (isSquarePose) {
+            squareHoldFrames++;
+            if (squareHoldFrames > 5) { // 約0.2秒維持で透明化ON
+              cloakActive = true;
+              squareHoldFrames = 0;
+              updateStatusText();
+            }
+          } else {
+            squareHoldFrames = Math.max(0, squareHoldFrames - 1);
+          }
+        } else {
+          // 現在が「透明状態」なら、合掌ポーズだけを待つ
+          if (isPrayPose) {
+            prayHoldFrames++;
+            if (prayHoldFrames > 5) { // 約0.2秒維持で透明化解除
+              cloakActive = false;
+              prayHoldFrames = 0;
+              updateStatusText();
+            }
+          } else {
+            prayHoldFrames = Math.max(0, prayHoldFrames - 1);
+          }
         }
-      } else {
-        poseHoldFrames = Math.max(0, poseHoldFrames - 1);
       }
 
       // 透明度のアニメーション更新（じわーっと変化）
@@ -411,17 +443,14 @@
       }
       gaugeBar.style.width = `${cloakAlpha * 100}%`;
 
-      // --- 拡張マスクの生成と自動背景学習 ---
+      // --- 拡張マスク生成と背景の描画 ---
       if (latestMask && bgCaptured) {
-        // 設定されたピクセル幅(expandSize)だけ人物の輪郭を大きく広げる
         createExpandedMask(latestMask, vw, vh, expandSize);
 
-        // 「背景の自動学習」がONの時は、広げた人物領域のさらに外側の綺麗な背景だけを少しずつ更新
         if (autoUpdateChk.checked) {
           bgHoleCtx.clearRect(0, 0, vw, vh);
           bgHoleCtx.drawImage(video, 0, 0, vw, vh);
           bgHoleCtx.globalCompositeOperation = 'destination-out';
-          // 人物のフチが背景に混ざらないよう、拡張マスクを2回重ねて確実にくり抜く
           bgHoleCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
           bgHoleCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
           bgHoleCtx.globalCompositeOperation = 'source-over';
@@ -437,23 +466,22 @@
       if (cloakAlpha > 0.01 && latestMask && bgCaptured) {
         personCtx.clearRect(0, 0, vw, vh);
 
-        // 大きく広げたマスクを描画（輪郭が濃いめになるよう2回重ねて中心部を100%不透明にする）
+        // 拡張したマスクを3回重ね描きして、輪郭ギリギリまで不透明度100%でしっかり消す
+        personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
         personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
         personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
 
-        // 広げたマスクの内側に、保存しておいた綺麗な背景を流し込む
         personCtx.globalCompositeOperation = 'source-in';
         personCtx.drawImage(cleanBgCanvas, 0, 0, vw, vh);
         personCtx.globalCompositeOperation = 'source-over';
 
-        // 現在の透明度(cloakAlpha)でカメラ映像の上にじわーっと重ねる
         ctx.save();
         ctx.globalAlpha = cloakAlpha;
         ctx.drawImage(personCanvas, 0, 0, vw, vh);
         ctx.restore();
       }
 
-      // 指先の認識ガイド（透明になる前のみ小さく表示）
+      // 認識ガイド表示（通常時は親指・人差し指に水色の点、合掌時は手のひらにオレンジの点）
       if (latestHands.length > 0 && cloakAlpha < 0.85) {
         ctx.save();
         for (const hand of latestHands) {
@@ -461,7 +489,7 @@
             const pt = hand[idx];
             ctx.beginPath();
             ctx.arc(pt.x * vw, pt.y * vh, 7, 0, Math.PI * 2);
-            ctx.fillStyle = isPoseNow ? '#76ff03' : 'rgba(0, 229, 255, 0.75)';
+            ctx.fillStyle = isSquarePose ? '#76ff03' : 'rgba(0, 229, 255, 0.75)';
             ctx.fill();
           });
         }
