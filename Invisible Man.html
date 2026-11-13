@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>光学迷彩・透明マント（顔だけ残すモード搭載版）</title>
+  <title>光学迷彩・透明マント（生首調整＆複数人モード搭載版）</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/face_detection.js" crossorigin="anonymous"></script>
@@ -203,14 +203,16 @@
       top: calc(max(10px, env(safe-area-inset-top)) + 50px);
       right: 12px;
       left: 12px;
-      max-width: 520px;
+      max-width: 540px;
+      max-height: 82dvh;
+      overflow-y: auto;
       margin: 0 auto;
       z-index: 25;
       text-align: center;
-      background: rgba(18, 18, 18, 0.88);
+      background: rgba(18, 18, 18, 0.90);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
-      padding: 14px;
+      padding: 12px 14px;
       border-radius: 16px;
       box-shadow: 0 8px 30px rgba(0,0,0,0.8);
       border: 1px solid rgba(255,255,255,0.15);
@@ -230,7 +232,7 @@
       align-items: center;
       font-size: 13px;
       color: #aaa;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       padding: 0 4px;
     }
     .close-panel-btn {
@@ -247,11 +249,11 @@
       gap: 6px;
       justify-content: center;
       flex-wrap: wrap;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     button.action-btn {
-      padding: 10px 12px;
-      font-size: 13px;
+      padding: 9px 11px;
+      font-size: 12px;
       font-weight: bold;
       border: none;
       border-radius: 8px;
@@ -269,10 +271,11 @@
     .btn-bg { background: #28a745; color: white; }
     .btn-timer { background: #17a2b8; color: white; }
     .btn-cam { background: #6f42c1; color: white; }
+    .btn-people { background: #e83e8c; color: white; }
     .btn-toggle { background: #ff9800; color: #000; }
     .btn-zoom {
-      padding: 4px 12px;
-      font-size: 15px;
+      padding: 3px 10px;
+      font-size: 14px;
       font-weight: bold;
       background: #444;
       color: #fff;
@@ -284,9 +287,9 @@
     .controls-grid {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 7px;
       background: rgba(255,255,255,0.06);
-      padding: 10px;
+      padding: 9px;
       border-radius: 10px;
       font-size: 12px;
       color: #ddd;
@@ -295,21 +298,34 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
     }
     input[type="range"] {
-      width: 120px;
+      width: 110px;
       accent-color: #00e5ff;
       cursor: pointer;
     }
-    .highlight-toggle {
-      background: rgba(138, 43, 226, 0.25);
-      border: 1px solid rgba(186, 85, 211, 0.5);
-      padding: 5px 10px;
-      border-radius: 6px;
-      color: #ffeb3b;
-      font-weight: bold;
+    .highlight-box {
+      background: rgba(138, 43, 226, 0.22);
+      border: 1px solid rgba(186, 85, 211, 0.45);
+      padding: 6px 8px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .head-sub-controls {
+      display: none;
+      font-size: 11px;
+      color: #eee;
+      padding-top: 4px;
+      border-top: 1px dashed rgba(255,255,255,0.2);
+    }
+    .head-sub-controls.show {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
 
     #media-modal {
@@ -375,8 +391,6 @@
       font-size: 14px;
       font-weight: bold;
       cursor: pointer;
-      text-decoration: none;
-      display: inline-block;
     }
     .btn-modal-close {
       padding: 10px 18px;
@@ -431,7 +445,8 @@
     <div class="btn-row">
       <button id="capture-now-btn" class="action-btn btn-bg" disabled>📸 背景を保存</button>
       <button id="capture-timer-btn" class="action-btn btn-timer" disabled>⏱️ 3秒後に保存</button>
-      <button id="switch-cam-btn" class="action-btn btn-cam" disabled>🔄 カメラ (イン)</button>
+      <button id="switch-cam-btn" class="action-btn btn-cam" disabled>🔄 カメラ(イン)</button>
+      <button id="people-mode-btn" class="action-btn btn-people" disabled>👤 1人モード</button>
       <button id="toggle-cloak-btn" class="action-btn btn-toggle" disabled>✨ 手動ON/OFF</button>
     </div>
 
@@ -448,11 +463,24 @@
         <input type="range" id="expand-slider" min="10" max="55" value="28">
       </div>
 
-      <!-- 顔だけ残すモード（ハリー・ポッター風）切り替えスイッチ -->
-      <div class="slider-row">
-        <label class="highlight-toggle" style="cursor: pointer;">
-          <input type="checkbox" id="floating-head-chk"> 🧙‍♂️ 顔だけ残すモード（体だけ透明）
-        </label>
+      <!-- 顔だけ残すモード（生首モード）＆ 微調整スライダー -->
+      <div class="highlight-box">
+        <div class="slider-row">
+          <label style="cursor: pointer; color: #ffeb3b; font-weight: bold;">
+            <input type="checkbox" id="floating-head-chk"> 🧙‍♂️ 顔だけ残すモード（生首マント）
+          </label>
+        </div>
+        <div id="head-sub-controls" class="head-sub-controls">
+          <div class="slider-row">
+            <span>頭頂部〜首の位置調整:</span>
+            <input type="range" id="head-shift-slider" min="10" max="50" value="32">
+            <small>(右にするほど首元が消え頭上が広がる)</small>
+          </div>
+          <div class="slider-row">
+            <span>残す頭のサイズ:</span>
+            <input type="range" id="head-scale-slider" min="70" max="140" value="105">
+          </div>
+        </div>
       </div>
 
       <div class="slider-row">
@@ -511,6 +539,7 @@
     const captureNowBtn = document.getElementById('capture-now-btn');
     const captureTimerBtn = document.getElementById('capture-timer-btn');
     const switchCamBtn = document.getElementById('switch-cam-btn');
+    const peopleModeBtn = document.getElementById('people-mode-btn');
     const toggleCloakBtn = document.getElementById('toggle-cloak-btn');
 
     const zoomSlider = document.getElementById('zoom-slider');
@@ -521,6 +550,10 @@
     const expandSlider = document.getElementById('expand-slider');
     const expandVal = document.getElementById('expand-val');
     const floatingHeadChk = document.getElementById('floating-head-chk');
+    const headSubControls = document.getElementById('head-sub-controls');
+    const headShiftSlider = document.getElementById('head-shift-slider');
+    const headScaleSlider = document.getElementById('head-scale-slider');
+
     const autoColorChk = document.getElementById('auto-color-chk');
     const soundChk = document.getElementById('sound-chk');
     const guideChk = document.getElementById('guide-chk');
@@ -535,6 +568,10 @@
     const softMaskCanvas = document.createElement('canvas');
     const softMaskCtx = softMaskCanvas.getContext('2d');
 
+    // 生首形状を綺麗に切り抜くための専用マスクキャンバス
+    const headCutoutCanvas = document.createElement('canvas');
+    const headCutoutCtx = headCutoutCanvas.getContext('2d');
+
     const personCanvas = document.createElement('canvas');
     const personCtx = personCanvas.getContext('2d');
 
@@ -548,6 +585,7 @@
 
     // 状態管理変数
     let currentFacingMode = 'user';
+    let isMultiPersonMode = false; // false: 1人モード, true: 複数人モード
     let currentStream = null;
     let bgCaptured = false;
     let cloakActive = false;
@@ -563,6 +601,9 @@
     let initialPinchZoom = 1.0;
 
     let expandSize = 28;
+    let headUpShift = 0.32;  // 顔ボックスを上にずらす比率（頭頂部を残し首元を削る）
+    let headSizeScale = 1.05; // 頭のサイズ倍率
+
     let bgBaseRGB = { r: 128, g: 128, b: 128 };
     let smoothScaleRGB = { r: 1.0, g: 1.0, b: 1.0 };
     let smoothOffsetRGB = { r: 0.0, g: 0.0, b: 0.0 };
@@ -996,7 +1037,32 @@
       expandVal.innerText = expandSize;
     });
 
+    // 生首モードのON/OFFと微調整スライダー連動
     floatingHeadChk.addEventListener('change', () => {
+      headSubControls.classList.toggle('show', floatingHeadChk.checked);
+      updateStatusText();
+    });
+
+    headShiftSlider.addEventListener('input', (e) => {
+      headUpShift = parseInt(e.target.value, 10) / 100;
+    });
+
+    headScaleSlider.addEventListener('input', (e) => {
+      headSizeScale = parseInt(e.target.value, 10) / 100;
+    });
+
+    // 👤 1人モード / 👥 複数人モードの切り替え
+    peopleModeBtn.addEventListener('click', () => {
+      isMultiPersonMode = !isMultiPersonMode;
+      if (isMultiPersonMode) {
+        peopleModeBtn.innerText = "👥 複数人モード";
+        peopleModeBtn.style.background = "#ff5722";
+        hands.setOptions({ maxNumHands: 6 }); // 最大3人分（6本の手）を同時認識
+      } else {
+        peopleModeBtn.innerText = "👤 1人モード";
+        peopleModeBtn.style.background = "#e83e8c";
+        hands.setOptions({ maxNumHands: 2 }); // 1人分（2本の手）に集中
+      }
       updateStatusText();
     });
 
@@ -1035,7 +1101,7 @@
         if (count > 0) {
           playBeepSound(660, 0.1);
           statusTxt.style.color = "#ffeb3b";
-          statusTxt.innerText = `⏱️ 背景保存まで ${count} 秒...（避けてください）`;
+          statusTxt.innerText = `⏱️ 背景保存まで ${count} 秒...（全員避けてください）`;
           count--;
         } else {
           clearInterval(timer);
@@ -1073,7 +1139,7 @@
     switchCamBtn.addEventListener('click', async () => {
       currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
       const camLabel = (currentFacingMode === 'user') ? 'イン' : 'アウト';
-      switchCamBtn.innerText = `🔄 カメラ (${camLabel})`;
+      switchCamBtn.innerText = `🔄 カメラ(${camLabel})`;
 
       if (currentFacingMode === 'user') {
         canvas.classList.add('mirror');
@@ -1092,13 +1158,14 @@
 
     function updateStatusText() {
       if (!bgCaptured) return;
-      const headTag = floatingHeadChk.checked ? "【🧙‍♂️顔残し】" : "";
+      const modeTag = isMultiPersonMode ? "[👥複数]" : "[👤1人]";
+      const headTag = floatingHeadChk.checked ? "[🧙‍♂️生首]" : "";
       if (cloakActive) {
         statusTxt.style.color = "#76ff03";
-        statusTxt.innerText = `✨ ${headTag}透明化中！（解除：両手をパー 🖐️🖐️）`;
+        statusTxt.innerText = `✨ ${modeTag}${headTag} 透明化中！（解除：両手パー 🖐️🖐️）`;
       } else {
         statusTxt.style.color = "#00e5ff";
-        statusTxt.innerText = `👁️ ${headTag}通常時（透明化：指で四角形 🔲）`;
+        statusTxt.innerText = `👁️ ${modeTag}${headTag} 通常時（発動：指で四角形 🔲）`;
       }
     }
 
@@ -1118,7 +1185,7 @@
       return extendedCount >= 4 && getDistance(hand[4], hand[20]) > 0.12;
     }
 
-    // 1. MediaPipe 人物切り抜き
+    // 1. MediaPipe 人物切り抜き（1人でも複数人でも画面内の人物全員を切り抜く）
     const selfieSegmentation = new SelfieSegmentation({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
     });
@@ -1141,13 +1208,13 @@
       latestHands = results.multiHandLandmarks || [];
     });
 
-    // 3. MediaPipe 顔検出（顔だけ残すモード用）
+    // 3. MediaPipe 顔検出（生首モード用）
     const faceDetection = new FaceDetection({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
     });
     faceDetection.setOptions({
       model: 'short',
-      minDetectionConfidence: 0.5
+      minDetectionConfidence: 0.45
     });
     faceDetection.onResults((results) => {
       latestFaces = results.detections || [];
@@ -1183,7 +1250,7 @@
 
       const vw = video.videoWidth || 640;
       const vh = video.videoHeight || 480;
-      [canvas, zoomFrameCanvas, cleanBgCanvas, softMaskCanvas, personCanvas, exportCanvas].forEach(c => {
+      [canvas, zoomFrameCanvas, cleanBgCanvas, softMaskCanvas, headCutoutCanvas, personCanvas, exportCanvas].forEach(c => {
         c.width = vw;
         c.height = vh;
       });
@@ -1198,6 +1265,7 @@
       targetCtx.drawImage(video, sx, sy, sw, sh, 0, 0, vw, vh);
     }
 
+    // 🧙‍♂️ 生首モードの改良マスク生成（頭頂部の髪はしっかり残し、アゴ下の首元・襟元はスパッと消す）
     function createSeamlessFeatherMask(sourceMask, vw, vh, radius) {
       softMaskCtx.clearRect(0, 0, vw, vh);
 
@@ -1215,32 +1283,71 @@
       softMaskCtx.filter = `blur(${innerBlur}px)`;
       softMaskCtx.drawImage(sourceMask, 0, 0, vw, vh);
       softMaskCtx.drawImage(sourceMask, 0, 0, vw, vh);
+      softMaskCtx.filter = 'none';
 
-      // 🧙‍♂️ 顔だけ残すモードがONの場合、検出された顔（頭部）を透明化マスクからくり抜いて実体化させる
+      // 生首モードがONの場合
       if (floatingHeadChk.checked && latestFaces.length > 0) {
-        softMaskCtx.save();
-        softMaskCtx.globalCompositeOperation = 'destination-out';
-        softMaskCtx.filter = 'blur(10px)'; // 首元の境界を自然にぼかす
-        softMaskCtx.fillStyle = '#000';
+        // 1人モードの時は一番大きく映っているメインの1人の顔だけを対象にする
+        let targetFaces = latestFaces;
+        if (!isMultiPersonMode && latestFaces.length > 1) {
+          targetFaces = [...latestFaces].sort((a, b) => {
+            const areaA = (a.boundingBox?.width || 0) * (a.boundingBox?.height || 0);
+            const areaB = (b.boundingBox?.width || 0) * (b.boundingBox?.height || 0);
+            return areaB - areaA;
+          }).slice(0, 1);
+        }
 
-        for (const det of latestFaces) {
+        headCutoutCtx.clearRect(0, 0, vw, vh);
+
+        for (const det of targetFaces) {
           const box = det.boundingBox;
           if (!box) continue;
-          const cx = box.xCenter * vw;
-          // 髪の毛・頭頂部までしっかり残るように中心を少し上にオフセット
-          const cy = (box.yCenter - box.height * 0.12) * vh;
-          const rx = (box.width * vw) * 0.68;
-          const ry = (box.height * vh) * 0.82;
 
-          softMaskCtx.beginPath();
-          softMaskCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-          softMaskCtx.fill();
-          softMaskCtx.fill(); // 2回重ねて顔の中心部が透けないようにする
+          const fw = box.width * vw;
+          const fh = box.height * vh;
+          const cx = box.xCenter * vw;
+
+          // ① 頭頂部の髪の毛が消えないように、楕円の中心を顔枠より大きく上（headUpShift分）に引き上げる
+          const cy = (box.yCenter * vh) - (fh * headUpShift);
+          const rx = fw * 0.62 * headSizeScale;
+          const ry = fh * 0.80 * headSizeScale;
+
+          // アゴのライン（これより下の首や洋服の襟元は残さないカットライン）
+          const chinCutY = (box.yCenter * vh) + (fh * (0.48 - (headUpShift - 0.30) * 0.6)) * headSizeScale;
+
+          headCutoutCtx.save();
+          // アゴのラインより上の領域だけにクリッピング（首元・服の襟が絶対に残らないようにする）
+          headCutoutCtx.beginPath();
+          // アゴ先が丸く自然に見えるよう曲線でクリップ領域の下端を作る
+          headCutoutCtx.moveTo(cx - rx * 1.5, 0);
+          headCutoutCtx.lineTo(cx + rx * 1.5, 0);
+          headCutoutCtx.lineTo(cx + rx * 1.2, chinCutY - fh * 0.12);
+          headCutoutCtx.quadraticCurveTo(cx, chinCutY + fh * 0.08, cx - rx * 1.2, chinCutY - fh * 0.12);
+          headCutoutCtx.closePath();
+          headCutoutCtx.clip();
+
+          // 頭頂部から顔全体にかけての楕円を描画
+          headCutoutCtx.fillStyle = '#000';
+          headCutoutCtx.beginPath();
+          headCutoutCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+          headCutoutCtx.fill();
+
+          // 頭頂部（髪の毛のボリューム部分）をさらに少し上に広げてカバー
+          headCutoutCtx.beginPath();
+          headCutoutCtx.ellipse(cx, cy - ry * 0.25, rx * 0.92, ry * 0.75, 0, 0, Math.PI * 2);
+          headCutoutCtx.fill();
+
+          headCutoutCtx.restore();
         }
+
+        // 作った「首元カット＆頭頂部拡張マスク」を適度にぼかして透明化マスクからくり抜く（＝顔だけ実体として残る）
+        softMaskCtx.save();
+        softMaskCtx.globalCompositeOperation = 'destination-out';
+        softMaskCtx.filter = 'blur(6px)';
+        softMaskCtx.drawImage(headCutoutCanvas, 0, 0, vw, vh);
+        softMaskCtx.drawImage(headCutoutCanvas, 0, 0, vw, vh); // 2回抜いて顔が半透明になるのを防ぐ
         softMaskCtx.restore();
       }
-
-      softMaskCtx.filter = 'none';
     }
 
     async function init() {
@@ -1256,6 +1363,7 @@
         captureNowBtn.disabled = false;
         captureTimerBtn.disabled = false;
         switchCamBtn.disabled = false;
+        peopleModeBtn.disabled = false;
         toggleCloakBtn.disabled = false;
 
         statusTxt.innerText = "2本指ピンチで画角を決めて「📸 背景を保存」を押してください";
@@ -1264,6 +1372,43 @@
         statusTxt.style.color = "#ff5252";
         statusTxt.innerText = `エラー: ${err.message}`;
       }
+    }
+
+    // 複数人の手（最大6本）の中から「誰か1人でも四角形または両手パーを作っているか」を全ペア総当たりで判定
+    function evaluateHandPoses(handsList) {
+      let isSquare = false;
+      let isOpenPalm = false;
+
+      if (handsList.length < 2) return { isSquare, isOpenPalm };
+
+      const fingerTh = 0.15;
+
+      // 検出されたすべての手のペア(i, j)をチェック（複数人でも誰か1人がポーズすれば反応）
+      for (let i = 0; i < handsList.length; i++) {
+        for (let j = i + 1; j < handsList.length; j++) {
+          const h1 = handsList[i];
+          const h2 = handsList[j];
+
+          const wristDist = getDistance(h1[0], h2[0]);
+          const indexDist = getDistance(h1[8], h2[8]);
+
+          // 同じ人の両手として妥当な距離（離れすぎていないペア）で四角形を判定
+          const cross1 = getDistance(h1[4], h2[8]);
+          const cross2 = getDistance(h1[8], h2[4]);
+          const para1 = getDistance(h1[4], h2[4]);
+          const para2 = getDistance(h1[8], h2[8]);
+
+          if ((cross1 < fingerTh && cross2 < fingerTh) || (para1 < fingerTh && para2 < fingerTh)) {
+            isSquare = true;
+          }
+
+          if (isHandOpen(h1) && isHandOpen(h2) && indexDist > 0.16 && wristDist > 0.18 && wristDist < 0.75) {
+            isOpenPalm = true;
+          }
+        }
+      }
+
+      return { isSquare, isOpenPalm };
     }
 
     function renderLoop() {
@@ -1278,7 +1423,6 @@
           selfieSegmentation.send({ image: zoomFrameCanvas }),
           hands.send({ image: zoomFrameCanvas })
         ];
-        // 顔だけ残すモードがONの時だけ顔検出AIも並列実行して負荷を抑える
         if (floatingHeadChk.checked) {
           tasks.push(faceDetection.send({ image: zoomFrameCanvas }));
         }
@@ -1287,30 +1431,8 @@
         });
       }
 
-      // ポーズ判定（発動＝四角形 / 解除＝両手パー）
-      let isSquarePose = false;
-      let isOpenPalmPose = false;
-
-      if (latestHands.length >= 2) {
-        const h1 = latestHands[0];
-        const h2 = latestHands[1];
-
-        const wristDist = getDistance(h1[0], h2[0]);
-        const indexDist = getDistance(h1[8], h2[8]);
-        const cross1 = getDistance(h1[4], h2[8]);
-        const cross2 = getDistance(h1[8], h2[4]);
-        const para1 = getDistance(h1[4], h2[4]);
-        const para2 = getDistance(h1[8], h2[8]);
-
-        const fingerTh = 0.15;
-        if ((cross1 < fingerTh && cross2 < fingerTh) || (para1 < fingerTh && para2 < fingerTh)) {
-          isSquarePose = true;
-        }
-
-        if (isHandOpen(h1) && isHandOpen(h2) && indexDist > 0.18 && wristDist > 0.20) {
-          isOpenPalmPose = true;
-        }
-      }
+      // ポーズ判定（1人モード・複数人モード共通対応）
+      const { isSquare: isSquarePose, isOpenPalm: isOpenPalmPose } = evaluateHandPoses(latestHands);
 
       if (bgCaptured) {
         if (!cloakActive) {
