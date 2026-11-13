@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>光学迷彩・透明マント（四角形で発動／合掌で解除）</title>
+  <title>光学迷彩・透明マント（四角形で発動／両手パーで解除）</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <style>
@@ -188,15 +188,15 @@
     let bgCaptured = false;
     let cloakActive = false;
     let cloakAlpha = 0.0;
-    let expandSize = 22; // 初期値を22pxに広げて輪郭のフチ残りをしっかり防止
+    let expandSize = 22;
 
     let latestMask = null;
     let latestHands = [];
     let isProcessingAI = false;
 
-    // ポーズ継続フレームカウンタ（誤認識防止用）
+    // ポーズ継続フレームカウンタ
     let squareHoldFrames = 0;
-    let prayHoldFrames = 0;
+    let openPalmHoldFrames = 0;
 
     const FADE_SPEED = 0.03; // じわーっと消える・戻るスピード
 
@@ -264,7 +264,7 @@
       if (!bgCaptured) return;
       if (cloakActive) {
         statusTxt.style.color = "#76ff03";
-        statusTxt.innerText = "✨ 透明化中！解除するには胸の前で「合掌（両手を合わせる）」してください 🙏";
+        statusTxt.innerText = "✨ 透明化中！解除するには両手を離して「パー（手を開く）」にしてください 🖐️🖐️";
       } else {
         statusTxt.style.color = "#00e5ff";
         statusTxt.innerText = "👁️ 通常状態：両手の親指と人差し指で「四角形」を作ると透明になります 🔲";
@@ -273,6 +273,30 @@
 
     function getDistance(p1, p2) {
       return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    }
+
+    // 手が「パー（開いた状態）」かどうかを判定する関数
+    function isHandOpen(hand) {
+      const wrist = hand[0];
+      // 人差し指(8,6)、中指(12,10)、薬指(16,14)、小指(20,18)の先端と第2関節を比較
+      const fingerPairs = [
+        [8, 6],
+        [12, 10],
+        [16, 14],
+        [20, 18]
+      ];
+      let extendedCount = 0;
+      for (const [tipIdx, pipIdx] of fingerPairs) {
+        const tipDist = getDistance(hand[tipIdx], wrist);
+        const pipDist = getDistance(hand[pipIdx], wrist);
+        // 指先の方が手首からしっかり離れていれば「伸びている」と判定
+        if (tipDist > pipDist * 1.12) {
+          extendedCount++;
+        }
+      }
+      // 親指の先(4)と小指の先(20)がある程度広がっているかも確認
+      const spreadDist = getDistance(hand[4], hand[20]);
+      return extendedCount >= 4 && spreadDist > 0.12;
     }
 
     // 1. MediaPipe 人物切り抜き
@@ -374,45 +398,43 @@
         });
       }
 
-      // --- ポーズ判定（発動＝四角形 / 解除＝合掌） ---
+      // --- ポーズ判定（発動＝指で四角形 / 解除＝両手パー） ---
       let isSquarePose = false;
-      let isPrayPose = false;
+      let isOpenPalmPose = false;
 
       if (latestHands.length >= 2) {
         const h1 = latestHands[0];
         const h2 = latestHands[1];
 
-        // 各部位の距離を計算
-        const wristDist = getDistance(h1[0], h2[0]);      // 手首(0)同士の距離
-        const palmDist = getDistance(h1[9], h2[9]);       // 手のひら中央(9)同士の距離
-        const midTipDist = getDistance(h1[12], h2[12]);   // 中指の先(12)同士の距離
+        const wristDist = getDistance(h1[0], h2[0]); // 手首同士の距離
+        const indexDist = getDistance(h1[8], h2[8]); // 人差し指同士の距離
 
-        const cross1 = getDistance(h1[4], h2[8]);         // 手1親指 - 手2人差し指
-        const cross2 = getDistance(h1[8], h2[4]);         // 手1人差し指 - 手2親指
-        const para1 = getDistance(h1[4], h2[4]);          // 親指同士
-        const para2 = getDistance(h1[8], h2[8]);          // 人差し指同士
+        const cross1 = getDistance(h1[4], h2[8]);
+        const cross2 = getDistance(h1[8], h2[4]);
+        const para1 = getDistance(h1[4], h2[4]);
+        const para2 = getDistance(h1[8], h2[8]);
 
         // 【発動条件：指で四角形】
-        // 親指と人差し指の先が近く、かつ「手首同士がしっかり離れている（合掌ではない）」
+        // 親指と人差し指の先がくっついている
         const fingerTh = 0.15;
-        if (((cross1 < fingerTh && cross2 < fingerTh) || (para1 < fingerTh && para2 < fingerTh)) && wristDist > 0.16) {
+        if ((cross1 < fingerTh && cross2 < fingerTh) || (para1 < fingerTh && para2 < fingerTh)) {
           isSquarePose = true;
         }
 
-        // 【解除条件：胸の前で合掌】
-        // 左右の「手首」「手のひら中央」「中指の先」がすべてピタッとくっついている
-        if (wristDist < 0.15 && palmDist < 0.12 && midTipDist < 0.12) {
-          isPrayPose = true;
+        // 【解除条件：両手を広げてパー】
+        // 両手とも5本指が開いており、かつ四角形ポーズではない（両手の人差し指がしっかり離れている）
+        if (isHandOpen(h1) && isHandOpen(h2) && indexDist > 0.18 && wristDist > 0.20) {
+          isOpenPalmPose = true;
         }
       }
 
-      // 状態に応じたアクション切り替え（専用ポーズでのみ変化するため、動いても勝手に戻らない）
+      // 状態に応じたアクション切り替え
       if (bgCaptured) {
         if (!cloakActive) {
-          // 現在が「通常状態」なら、四角形ポーズだけを待つ
+          // 通常時：四角形ポーズで透明化ON
           if (isSquarePose) {
             squareHoldFrames++;
-            if (squareHoldFrames > 5) { // 約0.2秒維持で透明化ON
+            if (squareHoldFrames > 5) {
               cloakActive = true;
               squareHoldFrames = 0;
               updateStatusText();
@@ -421,16 +443,16 @@
             squareHoldFrames = Math.max(0, squareHoldFrames - 1);
           }
         } else {
-          // 現在が「透明状態」なら、合掌ポーズだけを待つ
-          if (isPrayPose) {
-            prayHoldFrames++;
-            if (prayHoldFrames > 5) { // 約0.2秒維持で透明化解除
+          // 透明時：両手パーで透明化OFF（解除）
+          if (isOpenPalmPose) {
+            openPalmHoldFrames++;
+            if (openPalmHoldFrames > 5) {
               cloakActive = false;
-              prayHoldFrames = 0;
+              openPalmHoldFrames = 0;
               updateStatusText();
             }
           } else {
-            prayHoldFrames = Math.max(0, prayHoldFrames - 1);
+            openPalmHoldFrames = Math.max(0, openPalmHoldFrames - 1);
           }
         }
       }
@@ -466,7 +488,6 @@
       if (cloakAlpha > 0.01 && latestMask && bgCaptured) {
         personCtx.clearRect(0, 0, vw, vh);
 
-        // 拡張したマスクを3回重ね描きして、輪郭ギリギリまで不透明度100%でしっかり消す
         personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
         personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
         personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
@@ -481,17 +502,29 @@
         ctx.restore();
       }
 
-      // 認識ガイド表示（通常時は親指・人差し指に水色の点、合掌時は手のひらにオレンジの点）
-      if (latestHands.length > 0 && cloakAlpha < 0.85) {
+      // --- 手の認識ガイド表示 ---
+      if (latestHands.length > 0) {
         ctx.save();
-        for (const hand of latestHands) {
-          [4, 8].forEach(idx => {
-            const pt = hand[idx];
+        if (!cloakActive) {
+          // 通常時：親指と人差し指に水色のドット（四角形成立で緑）
+          for (const hand of latestHands) {
+            [4, 8].forEach(idx => {
+              const pt = hand[idx];
+              ctx.beginPath();
+              ctx.arc(pt.x * vw, pt.y * vh, 7, 0, Math.PI * 2);
+              ctx.fillStyle = isSquarePose ? '#76ff03' : 'rgba(0, 229, 255, 0.75)';
+              ctx.fill();
+            });
+          }
+        } else {
+          // 透明時：両手パーの認識がわかるよう、手のひら中央(9)に小さなガイドを表示
+          for (const hand of latestHands) {
+            const pt = hand[9];
             ctx.beginPath();
-            ctx.arc(pt.x * vw, pt.y * vh, 7, 0, Math.PI * 2);
-            ctx.fillStyle = isSquarePose ? '#76ff03' : 'rgba(0, 229, 255, 0.75)';
+            ctx.arc(pt.x * vw, pt.y * vh, 8, 0, Math.PI * 2);
+            ctx.fillStyle = isOpenPalmPose ? '#76ff03' : 'rgba(255, 152, 0, 0.6)';
             ctx.fill();
-          });
+          }
         }
         ctx.restore();
       }
