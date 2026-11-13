@@ -3,15 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>光学迷彩・透明マント</title>
-  <!-- 確実に読み込める標準scriptタグ方式のMediaPipeライブラリ -->
+  <title>リアルタイム光学迷彩（カメレオン屈折）</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <style>
     body {
       margin: 0;
       padding: 0;
-      background-color: #1a1a1a;
+      background-color: #121212;
       color: white;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       display: flex;
@@ -25,50 +24,36 @@
       top: 20px;
       z-index: 10;
       text-align: center;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.75);
       padding: 15px 25px;
       border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px);
       max-width: 90%;
     }
-    button {
-      padding: 12px 24px;
+    #status {
       font-size: 16px;
       font-weight: bold;
-      background: #28a745;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    button:hover:not(:disabled) {
-      background: #218838;
-    }
-    button:disabled {
-      background: #555;
-      cursor: not-allowed;
-    }
-    #status {
-      margin-top: 12px;
-      font-size: 15px;
-      font-weight: bold;
-      color: #ffeb3b;
+      color: #00e5ff;
       line-height: 1.4;
     }
+    .sub-hint {
+      margin-top: 6px;
+      font-size: 13px;
+      color: #ccc;
+    }
     #gauge-container {
-      margin-top: 8px;
+      margin-top: 10px;
       width: 100%;
       height: 6px;
-      background: #444;
+      background: #333;
       border-radius: 3px;
       overflow: hidden;
-      display: none;
     }
     #gauge-bar {
       width: 0%;
       height: 100%;
-      background: #00e5ff;
+      background: linear-gradient(90deg, #00e5ff, #76ff03);
       transition: width 0.05s linear;
     }
     canvas {
@@ -78,7 +63,7 @@
       height: auto;
       background: #000;
       border-radius: 8px;
-      box-shadow: 0 8px 25px rgba(0,0,0,0.7);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.8);
     }
     video {
       display: none;
@@ -88,8 +73,8 @@
 <body>
 
   <div id="ui-container">
-    <button id="capture-bg-btn" disabled>準備中...</button>
-    <div id="status">カメラを起動しています...</div>
+    <div id="status">カメラとAIモデルを準備中...</div>
+    <div class="sub-hint">※背景保存は不要です。後ろの景色やカメラが動いても自動で周囲に同化します</div>
     <div id="gauge-container">
       <div id="gauge-bar"></div>
     </div>
@@ -102,35 +87,41 @@
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('output-canvas');
     const ctx = canvas.getContext('2d');
-    const captureBtn = document.getElementById('capture-bg-btn');
     const statusTxt = document.getElementById('status');
-    const gaugeContainer = document.getElementById('gauge-container');
     const gaugeBar = document.getElementById('gauge-bar');
 
-    // 背景保存用キャンバス
-    const bgCanvas = document.createElement('canvas');
-    const bgCtx = bgCanvas.getContext('2d');
+    // 1. 動的背景キャンバス（人間以外のリアルタイム映像を常時更新し続ける）
+    const dynamicBgCanvas = document.createElement('canvas');
+    const dynamicBgCtx = dynamicBgCanvas.getContext('2d');
 
-    // 人物切り抜き合成用の一時キャンバス
+    // 2. カメレオン環境キャンバス（現在の周囲の色を大きくぼかして内側に浸透させる）
+    const ambientCanvas = document.createElement('canvas');
+    const ambientCtx = ambientCanvas.getContext('2d');
+
+    // 3. 屈折・歪み生成用キャンバス
+    const refractCanvas = document.createElement('canvas');
+    const refractCtx = refractCanvas.getContext('2d');
+
+    // 4. 人物シルエット切り抜き用キャンバス
     const personCanvas = document.createElement('canvas');
     const personCtx = personCanvas.getContext('2d');
 
-    let bgCaptured = false;
     let isSquarePose = false;
     let latestMask = null;
     let isProcessingAI = false;
+    let bgInitialized = false;
+    let waveTime = 0;
 
-    // じわーっと消えるための透明度変数 (0.0: 通常 〜 1.0: 完全透明)
+    // じわーっと消えるための透明度変数 (0.0: 通常 〜 1.0: 完全同化)
     let cloakAlpha = 0.0;
-    const FADE_IN_SPEED = 0.025;  // 消える速さ
-    const FADE_OUT_SPEED = 0.04;  // 戻る速さ
+    const FADE_IN_SPEED = 0.03;   // 透明になる速さ
+    const FADE_OUT_SPEED = 0.04;  // 元に戻る速さ
 
-    // 2点間の距離計算
     function getDistance(p1, p2) {
       return Math.hypot(p1.x - p2.x, p1.y - p2.y);
     }
 
-    // 1. MediaPipe 人物切り抜きモデルの初期化
+    // MediaPipe 人物セグメンテーション
     const selfieSegmentation = new SelfieSegmentation({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
     });
@@ -139,7 +130,7 @@
       latestMask = results.segmentationMask;
     });
 
-    // 2. MediaPipe 手の骨格検出モデルの初期化
+    // MediaPipe 手の骨格検出
     const hands = new Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
@@ -155,16 +146,12 @@
         const hand1 = results.multiHandLandmarks[0];
         const hand2 = results.multiHandLandmarks[1];
 
-        // パターンA: 親指(4)と人差し指(8)を互い違いにくっつける（映画監督フレーム型）
         const crossDist1 = getDistance(hand1[4], hand2[8]);
         const crossDist2 = getDistance(hand1[8], hand2[4]);
-
-        // パターンB: 親指同士(4-4)、人差し指同士(8-8)をくっつける（四角形・おにぎり型）
         const parallelDist1 = getDistance(hand1[4], hand2[4]);
         const parallelDist2 = getDistance(hand1[8], hand2[8]);
 
-        const threshold = 0.12; // 指先の判定距離
-
+        const threshold = 0.12;
         if ((crossDist1 < threshold && crossDist2 < threshold) ||
             (parallelDist1 < threshold && parallelDist2 < threshold)) {
           isSquarePose = true;
@@ -172,7 +159,6 @@
       }
     });
 
-    // 3. カメラの起動
     async function init() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -183,18 +169,16 @@
 
         const vw = video.videoWidth || 640;
         const vh = video.videoHeight || 480;
-        canvas.width = bgCanvas.width = personCanvas.width = vw;
-        canvas.height = bgCanvas.height = personCanvas.height = vh;
+        [canvas, dynamicBgCanvas, ambientCanvas, refractCanvas, personCanvas].forEach(c => {
+          c.width = vw;
+          c.height = vh;
+        });
 
-        // 最初にAIモデルを1回空回ししてウォーミングアップ（初回カクつき防止）
-        statusTxt.innerText = "AIモデルを準備しています（数秒お待ちください）...";
+        statusTxt.innerText = "AIモデルを準備しています...";
         await selfieSegmentation.send({ image: video });
         await hands.send({ image: video });
 
-        captureBtn.disabled = false;
-        captureBtn.innerText = "背景を保存してスタート";
-        statusTxt.innerText = "【ステップ1】誰もいない風景を映し、「背景を保存」を押してください";
-
+        statusTxt.innerText = "準備完了！両手の親指と人差し指で「四角形」を作ると周囲に同化します";
         requestAnimationFrame(renderLoop);
       } catch (err) {
         statusTxt.style.color = "#ff5252";
@@ -203,27 +187,12 @@
       }
     }
 
-    // 4. 背景保存ボタン
-    captureBtn.addEventListener('click', () => {
-      bgCtx.drawImage(video, 0, 0, bgCanvas.width, bgCanvas.height);
-      bgCaptured = true;
-      cloakAlpha = 0.0;
-
-      captureBtn.innerText = "背景を撮り直す";
-      gaugeContainer.style.display = "block";
-      statusTxt.innerText = "【ステップ2】カメラの前に立ち、両手の親指と人差し指で「四角形」を作ってください";
-    });
-
-    // 5. メイン描画ループ
     function renderLoop() {
-      // 【ステップ1】背景保存前は現在のカメラ映像をそのまま表示
-      if (!bgCaptured) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        requestAnimationFrame(renderLoop);
-        return;
-      }
+      const vw = canvas.width;
+      const vh = canvas.height;
+      waveTime += 0.12;
 
-      // 【ステップ2】背景保存後：非同期でAI推論を実行（描画を止めないように制御）
+      // 非同期でAI推論を実行
       if (!isProcessingAI && video.readyState >= 2) {
         isProcessingAI = true;
         Promise.all([
@@ -244,39 +213,87 @@
       // ステータス表示の更新
       gaugeBar.style.width = `${cloakAlpha * 100}%`;
       if (cloakAlpha >= 0.99) {
-        statusTxt.innerText = "✨ 光学迷彩：完全同化中 ✨";
+        statusTxt.innerText = "🦎 リアルタイム光学迷彩：完全同化中";
       } else if (isSquarePose) {
-        statusTxt.innerText = "🌫️ 背景に同化しています...";
+        statusTxt.innerText = "🌫️ 周囲の空間に溶け込んでいます...";
       } else {
         statusTxt.innerText = "両手の親指と人差し指で「四角形」を作るとじわっと消えます";
       }
 
-      // キャンバスへの合成描画
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // --- ステップA: 周囲のリアルタイム背景を常時アップデート ---
+      if (latestMask) {
+        if (!bgInitialized) {
+          // 初回フレームは大きくぼかした映像をベースとして敷く
+          dynamicBgCtx.filter = 'blur(35px)';
+          dynamicBgCtx.drawImage(video, 0, 0, vw, vh);
+          dynamicBgCtx.filter = 'none';
+          bgInitialized = true;
+        }
+
+        // 「人間がいない領域（背景）」だけを切り抜いて ambientCanvas を作る
+        ambientCtx.clearRect(0, 0, vw, vh);
+        ambientCtx.drawImage(video, 0, 0, vw, vh);
+        ambientCtx.globalCompositeOperation = 'destination-out';
+        ambientCtx.filter = 'blur(6px)'; // 人物の輪郭の少し外側まで余裕を持ってくり抜く
+        ambientCtx.drawImage(latestMask, 0, 0, vw, vh);
+        ambientCtx.filter = 'none';
+        ambientCtx.globalCompositeOperation = 'source-over';
+
+        // 1. 周囲の最新背景を、大きくぼかしてシルエットの内側へじんわり浸透させる（カメレオン効果）
+        // これにより照明変化やカメラ移動があっても周囲の色とリアルタイムに馴染む
+        dynamicBgCtx.save();
+        dynamicBgCtx.globalAlpha = 0.08;
+        dynamicBgCtx.filter = 'blur(28px)';
+        dynamicBgCtx.drawImage(ambientCanvas, -25, -25, vw + 50, vh + 50);
+        dynamicBgCtx.restore();
+
+        // 2. 人間がいない領域には、くっきりした最新のカメラ映像をそのまま上書き保存する
+        // （自分が動いて退いた場所や、後ろで動いている背景が即座に反映される）
+        dynamicBgCtx.drawImage(ambientCanvas, 0, 0, vw, vh);
+      }
+
+      // --- ステップB: メイン画面の描画 ---
+      ctx.clearRect(0, 0, vw, vh);
+      ctx.drawImage(video, 0, 0, vw, vh); // ベースの現在映像
 
       if (cloakAlpha > 0.01 && latestMask) {
-        // 1. まず現在のカメラ映像を全面に描く
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // 1. 動的背景に「空間屈折（陽炎のようなゆらぎ＋拡大）」を加える
+        refractCtx.clearRect(0, 0, vw, vh);
+        const stripHeight = 8; // 8pxごとに横スライスして波打たせる
+        for (let y = 0; y < vh; y += stripHeight) {
+          // サイン波で左右にゆらゆら屈折させる
+          const offsetX = Math.sin(y * 0.04 + waveTime) * 10 * cloakAlpha;
+          // 少しだけ拡大（レンズ屈折効果）して周囲の模様を引き込む
+          refractCtx.drawImage(
+            dynamicBgCanvas,
+            0, y, vw, stripHeight,
+            offsetX - 8, y - 4, vw + 16, stripHeight + 8
+          );
+        }
 
-        // 2. 別キャンバス(personCanvas)で「人物の形に切り抜いた背景画像」を作る
-        personCtx.clearRect(0, 0, personCanvas.width, personCanvas.height);
-        personCtx.filter = 'blur(8px)'; // 境界線をぼかして自然に溶け込ませる
-        personCtx.drawImage(latestMask, 0, 0, personCanvas.width, personCanvas.height);
+        // 2. 人物シルエットの形に屈折背景を切り抜く
+        personCtx.clearRect(0, 0, vw, vh);
+        personCtx.filter = 'blur(10px)'; // 境界を滑らかに溶かす
+        personCtx.drawImage(latestMask, 0, 0, vw, vh);
         personCtx.filter = 'none';
 
-        // マスク（人物シルエット）の内側だけに、保存した背景画像を流し込む
         personCtx.globalCompositeOperation = 'source-in';
-        personCtx.drawImage(bgCanvas, 0, 0, personCanvas.width, personCanvas.height);
+        personCtx.drawImage(refractCanvas, 0, 0, vw, vh);
         personCtx.globalCompositeOperation = 'source-over';
 
-        // 3. 切り抜いた背景を、現在の透明度(cloakAlpha)でカメラ映像の上にじわっと重ねる
+        // 3. 光学迷彩の輪郭ハイライト（うっすらとガラスのようなエッジを光らせる）
+        personCtx.save();
+        personCtx.globalCompositeOperation = 'source-atop';
+        personCtx.strokeStyle = `rgba(180, 245, 255, ${0.25 * cloakAlpha})`;
+        personCtx.lineWidth = 4;
+        personCtx.strokeRect(0, 0, vw, vh);
+        personCtx.restore();
+
+        // 4. 現在の透明度(cloakAlpha)でメイン画面にじわっと重ねる
         ctx.save();
         ctx.globalAlpha = cloakAlpha;
-        ctx.drawImage(personCanvas, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(personCanvas, 0, 0, vw, vh);
         ctx.restore();
-      } else {
-        // 透明度が0の時は通常のカメラ映像
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       }
 
       requestAnimationFrame(renderLoop);
