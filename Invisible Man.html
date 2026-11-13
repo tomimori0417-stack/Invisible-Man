@@ -2,73 +2,97 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>リアルタイム光学迷彩・透明マント</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>光学迷彩・透明マント（タブレット対応版）</title>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <style>
     body {
       margin: 0;
       padding: 0;
-      background-color: #121212;
+      background-color: #111;
       color: white;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       min-height: 100vh;
+      overflow-x: hidden;
     }
     #ui-container {
-      position: absolute;
-      top: 15px;
+      width: 92%;
+      max-width: 760px;
+      margin-top: 10px;
       z-index: 10;
       text-align: center;
-      background: rgba(0, 0, 0, 0.82);
-      padding: 15px 20px;
+      background: rgba(20, 20, 20, 0.9);
+      padding: 12px 16px;
       border-radius: 12px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.7);
-      backdrop-filter: blur(6px);
-      max-width: 92%;
-      width: 600px;
-    }
-    .mode-switch {
-      display: flex;
-      gap: 8px;
-      justify-content: center;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-    button {
-      padding: 9px 16px;
-      font-size: 14px;
-      font-weight: bold;
-      background: #333;
-      color: #ccc;
-      border: 1px solid #555;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    button.active {
-      background: #007bff;
-      color: white;
-      border-color: #00e5ff;
-      box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
-    }
-    button.action-btn {
-      background: #28a745;
-      color: white;
-      border-color: #28a745;
-    }
-    button.action-btn:hover {
-      background: #218838;
+      border: 1px solid #333;
     }
     #status {
       font-size: 15px;
       font-weight: bold;
-      color: #ffeb3b;
-      margin-top: 6px;
+      color: #00e5ff;
+      margin-bottom: 10px;
+    }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+    button:disabled {
+      background: #444 !important;
+      color: #888 !important;
+      cursor: not-allowed;
+    }
+    .btn-bg {
+      background: #28a745;
+      color: white;
+    }
+    .btn-timer {
+      background: #17a2b8;
+      color: white;
+    }
+    .btn-cam {
+      background: #6f42c1;
+      color: white;
+    }
+    .btn-toggle {
+      background: #ff9800;
+      color: #000;
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #ddd;
+      background: rgba(255,255,255,0.06);
+      padding: 6px 12px;
+      border-radius: 6px;
+    }
+    input[type="range"] {
+      width: 140px;
+      accent-color: #00e5ff;
+      cursor: pointer;
     }
     #gauge-container {
       margin-top: 8px;
@@ -82,16 +106,20 @@
       width: 0%;
       height: 100%;
       background: linear-gradient(90deg, #00e5ff, #76ff03);
-      transition: width 0.05s linear;
     }
     canvas {
-      transform: scaleX(-1);
-      width: 100%;
+      width: 96%;
       max-width: 800px;
       height: auto;
       background: #000;
-      border-radius: 8px;
+      border-radius: 10px;
       box-shadow: 0 8px 25px rgba(0,0,0,0.8);
+      margin-top: 10px;
+      margin-bottom: 20px;
+    }
+    /* インカメラの時だけ鏡のように左右反転するクラス */
+    canvas.mirror {
+      transform: scaleX(-1);
     }
     video {
       display: none;
@@ -101,19 +129,30 @@
 <body>
 
   <div id="ui-container">
-    <div class="mode-switch">
-      <button id="mode-warp-btn" class="active">① 空間ワープ式（背景保存不要）</button>
-      <button id="mode-bg-btn">② スマート背景記憶式（くっきり透過）</button>
-      <button id="capture-btn" class="action-btn" style="display:none;">3秒後に背景を撮影</button>
+    <div id="status">カメラとAIモデルを起動中...</div>
+
+    <div class="btn-row">
+      <button id="capture-now-btn" class="btn-bg" disabled>📸 今すぐ背景を保存</button>
+      <button id="capture-timer-btn" class="btn-timer" disabled>⏱️ 3秒後に背景を保存</button>
+      <button id="switch-cam-btn" class="btn-cam" disabled>🔄 カメラ切替 (現在: イン)</button>
+      <button id="toggle-cloak-btn" class="btn-toggle" disabled>✨ 手動で透明ON/OFF</button>
     </div>
-    <div id="status">カメラとAIモデルを準備中...</div>
+
+    <div class="slider-row">
+      <label for="expand-slider">輪郭の拡張（フチ消し幅）: <strong id="expand-val">18</strong>px</label>
+      <input type="range" id="expand-slider" min="4" max="40" value="18">
+      <label style="margin-left: 8px; cursor: pointer;">
+        <input type="checkbox" id="auto-update-chk" checked> 背景の自動学習を併用
+      </label>
+    </div>
+
     <div id="gauge-container">
       <div id="gauge-bar"></div>
     </div>
   </div>
 
   <video id="webcam" autoplay playsinline muted></video>
-  <canvas id="output-canvas"></canvas>
+  <canvas id="output-canvas" class="mirror"></canvas>
 
   <script>
     const video = document.getElementById('webcam');
@@ -121,85 +160,113 @@
     const ctx = canvas.getContext('2d');
     const statusTxt = document.getElementById('status');
     const gaugeBar = document.getElementById('gauge-bar');
-    const modeWarpBtn = document.getElementById('mode-warp-btn');
-    const modeBgBtn = document.getElementById('mode-bg-btn');
-    const captureBtn = document.getElementById('capture-btn');
 
-    // オフスクリーンキャンバス群
-    const bgCanvas = document.createElement('canvas');
-    const bgCtx = bgCanvas.getContext('2d');
+    const captureNowBtn = document.getElementById('capture-now-btn');
+    const captureTimerBtn = document.getElementById('capture-timer-btn');
+    const switchCamBtn = document.getElementById('switch-cam-btn');
+    const toggleCloakBtn = document.getElementById('toggle-cloak-btn');
+    const expandSlider = document.getElementById('expand-slider');
+    const expandVal = document.getElementById('expand-val');
+    const autoUpdateChk = document.getElementById('auto-update-chk');
 
-    const warpCanvas = document.createElement('canvas');
-    const warpCtx = warpCanvas.getContext('2d');
+    // オフスクリーンキャンバス
+    const cleanBgCanvas = document.createElement('canvas'); // 保存された背景画像
+    const cleanBgCtx = cleanBgCanvas.getContext('2d');
 
-    const personCanvas = document.createElement('canvas');
+    const expandedMaskCanvas = document.createElement('canvas'); // 輪郭を大きく広げたマスク用
+    const expandedMaskCtx = expandedMaskCanvas.getContext('2d');
+
+    const personCanvas = document.createElement('canvas'); // 人物シルエット合成用
     const personCtx = personCanvas.getContext('2d');
 
-    // 縮小マスク解析用キャンバス（64x48で高速に人物の左右端を計算する）
-    const GRID_W = 64;
-    const GRID_H = 48;
-    const smallMaskCanvas = document.createElement('canvas');
-    smallMaskCanvas.width = GRID_W;
-    smallMaskCanvas.height = GRID_H;
-    const smallMaskCtx = smallMaskCanvas.getContext('2d', { willReadFrequently: true });
+    const bgHoleCanvas = document.createElement('canvas'); // 自動背景更新用（人間以外を切り抜く）
+    const bgHoleCtx = bgHoleCanvas.getContext('2d');
 
-    let currentMode = 'warp'; // 'warp' または 'smart_bg'
+    // 状態管理変数
+    let currentFacingMode = 'user'; // 'user'(インカメラ) または 'environment'(アウトカメラ)
+    let currentStream = null;
     let bgCaptured = false;
-    let isSquarePose = false;
-    let detectedFingerPoints = null;
-    let latestMask = null;
-    let isProcessingAI = false;
-    let waveTime = 0;
-
+    let cloakActive = false;
     let cloakAlpha = 0.0;
-    const FADE_IN_SPEED = 0.035;
-    const FADE_OUT_SPEED = 0.04;
+    let expandSize = 18; // 輪郭を広げるピクセル幅
 
-    // モード切り替え
-    modeWarpBtn.addEventListener('click', () => {
-      currentMode = 'warp';
-      modeWarpBtn.classList.add('active');
-      modeBgBtn.classList.remove('active');
-      captureBtn.style.display = 'none';
-      statusTxt.innerText = "【空間ワープ式】両手の親指と人差し指で「四角形」を作ると周囲の景色が体を貫通します";
+    let latestMask = null;
+    let latestHands = [];
+    let isProcessingAI = false;
+    let poseHoldFrames = 0;
+    let cooldownFrames = 0;
+
+    const FADE_SPEED = 0.03; // じわーっと消えるスピード
+
+    // スライダーで輪郭の拡張サイズを変更
+    expandSlider.addEventListener('input', (e) => {
+      expandSize = parseInt(e.target.value, 10);
+      expandVal.innerText = expandSize;
     });
 
-    modeBgBtn.addEventListener('click', () => {
-      currentMode = 'smart_bg';
-      modeBgBtn.classList.add('active');
-      modeWarpBtn.classList.remove('active');
-      captureBtn.style.display = 'inline-block';
-      if (!bgCaptured) {
-        // まだ撮影していない場合は一旦現在の映像を入れておく
-        bgCtx.drawImage(video, 0, 0, bgCanvas.width, bgCanvas.height);
-        statusTxt.innerText = "一度画面から外れて「3秒後に背景を撮影」を押すと、真後ろの背景が完璧に透けます";
-      }
+    // 今すぐ背景を保存
+    captureNowBtn.addEventListener('click', () => {
+      saveBackgroundNow();
     });
 
-    // 3秒カウントダウン付き背景撮影
-    captureBtn.addEventListener('click', () => {
+    // 3秒タイマーで背景を保存
+    captureTimerBtn.addEventListener('click', () => {
       let count = 3;
-      captureBtn.disabled = true;
+      captureNowBtn.disabled = true;
+      captureTimerBtn.disabled = true;
       const timer = setInterval(() => {
         if (count > 0) {
-          statusTxt.innerText = `📸 背景撮影まで あと ${count} 秒...（カメラの前から避けてください）`;
+          statusTxt.innerText = `⏱️ 背景保存まであと ${count} 秒...（カメラの前から避けてください！）`;
           count--;
         } else {
           clearInterval(timer);
-          bgCtx.drawImage(video, 0, 0, bgCanvas.width, bgCanvas.height);
-          bgCaptured = true;
-          captureBtn.disabled = false;
-          captureBtn.innerText = "背景を撮り直す(3秒)";
-          statusTxt.innerText = "✅ 背景を記憶しました！前に立って「四角形」ポーズをとってください";
+          saveBackgroundNow();
+          captureNowBtn.disabled = false;
+          captureTimerBtn.disabled = false;
         }
       }, 1000);
+    });
+
+    function saveBackgroundNow() {
+      cleanBgCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      bgCaptured = true;
+      statusTxt.innerText = "✅ 背景を保存しました！両手で「四角形」を作ると透明になります";
+    }
+
+    // 手動で透明ON/OFF切替
+    toggleCloakBtn.addEventListener('click', () => {
+      if (!bgCaptured) {
+        saveBackgroundNow();
+      }
+      cloakActive = !cloakActive;
+    });
+
+    // インカメラ / アウトカメラ切替
+    switchCamBtn.addEventListener('click', async () => {
+      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      const camLabel = (currentFacingMode === 'user') ? 'イン' : 'アウト';
+      switchCamBtn.innerText = `🔄 カメラ切替 (現在: ${camLabel})`;
+
+      // インカメラの時は鏡表示、アウトカメラの時は正像表示
+      if (currentFacingMode === 'user') {
+        canvas.classList.add('mirror');
+      } else {
+        canvas.classList.remove('mirror');
+      }
+
+      bgCaptured = false;
+      cloakActive = false;
+      cloakAlpha = 0.0;
+      statusTxt.innerText = `${camLabel}カメラに切り替えています...`;
+      await startCamera(currentFacingMode);
+      statusTxt.innerText = "カメラが切り替わりました。誰もいない状態で「背景を保存」を押してください";
     });
 
     function getDistance(p1, p2) {
       return Math.hypot(p1.x - p2.x, p1.y - p2.y);
     }
 
-    // 1. MediaPipe 人物セグメンテーション
+    // 1. MediaPipe 人物切り抜き
     const selfieSegmentation = new SelfieSegmentation({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
     });
@@ -219,161 +286,79 @@
       minTrackingConfidence: 0.5
     });
     hands.onResults((results) => {
-      isSquarePose = false;
-      detectedFingerPoints = null;
-
-      if (results.multiHandLandmarks && results.multiHandLandmarks.length >= 2) {
-        const h1 = results.multiHandLandmarks[0];
-        const h2 = results.multiHandLandmarks[1];
-
-        // 親指の先(4)または第1関節(3) と 人差し指の先(8) の距離を計算
-        const cross1 = getDistance(h1[4], h2[8]);
-        const cross2 = getDistance(h1[8], h2[4]);
-        const para1 = getDistance(h1[4], h2[4]);
-        const para2 = getDistance(h1[8], h2[8]);
-
-        // 認識しやすいよう判定距離を 0.16 に拡大
-        const threshold = 0.16;
-
-        if ((cross1 < threshold && cross2 < threshold) ||
-            (para1 < threshold && para2 < threshold)) {
-          isSquarePose = true;
-        }
-
-        // 画面上に視覚ガイドを出すために4点の座標を保存
-        detectedFingerPoints = [h1[4], h1[8], h2[4], h2[8]];
-      }
+      latestHands = results.multiHandLandmarks || [];
     });
+
+    // カメラストリームの起動・再起動
+    async function startCamera(facingMode) {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+      }
+
+      const constraints = {
+        video: {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        }
+      };
+
+      currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = currentStream;
+      await video.play();
+
+      const vw = video.videoWidth || 640;
+      const vh = video.videoHeight || 480;
+      [canvas, cleanBgCanvas, expandedMaskCanvas, personCanvas, bgHoleCanvas].forEach(c => {
+        c.width = vw;
+        c.height = vh;
+      });
+    }
 
     async function init() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }
-        });
-        video.srcObject = stream;
-        await video.play();
-
-        const vw = video.videoWidth || 640;
-        const vh = video.videoHeight || 480;
-        [canvas, bgCanvas, warpCanvas, personCanvas].forEach(c => {
-          c.width = vw;
-          c.height = vh;
-        });
+        await startCamera(currentFacingMode);
 
         statusTxt.innerText = "AIモデルを準備しています...";
         await selfieSegmentation.send({ image: video });
         await hands.send({ image: video });
 
-        statusTxt.innerText = "準備完了！両手の親指と人差し指で「四角形」を作ると透明化します";
+        captureNowBtn.disabled = false;
+        captureTimerBtn.disabled = false;
+        switchCamBtn.disabled = false;
+        toggleCloakBtn.disabled = false;
+
+        statusTxt.innerText = "【ステップ1】誰もいない風景を映し、「背景を保存」を押してください";
         requestAnimationFrame(renderLoop);
       } catch (err) {
         statusTxt.style.color = "#ff5252";
-        statusTxt.innerHTML = `エラー: ${err.name} - ${err.message}`;
+        statusTxt.innerText = `カメラ起動エラー: ${err.message}`;
       }
     }
 
-    // 【モード①用】人物の左右にあるリアルタイム背景を引き伸ばして人物領域を埋める関数
-    function generateRealtimeWarpBg(vw, vh, maskData) {
-      warpCtx.drawImage(video, 0, 0, vw, vh);
-      const scaleX = vw / GRID_W;
-      const scaleY = vh / GRID_H;
+    // 人物マスクの輪郭をグッと広げる関数（体のフチが残るのを防ぐ）
+    function createExpandedMask(sourceMask, vw, vh, radius) {
+      expandedMaskCtx.clearRect(0, 0, vw, vh);
+      // ぼかしをかけて一回り大きくする
+      expandedMaskCtx.filter = `blur(${Math.max(4, Math.floor(radius * 0.6))}px)`;
 
-      for (let gy = 0; gy < GRID_H; gy++) {
-        // この高さ(行)における人物の左端(minX)と右端(maxX)を探す
-        let minX = GRID_W;
-        let maxX = -1;
-        for (let gx = 0; gx < GRID_W; gx++) {
-          const idx = (gy * GRID_W + gx) * 4;
-          // MediaPipeのマスクは赤チャンネル(R)またはAlphaに255が入る
-          if (maskData[idx] > 100 || maskData[idx + 3] > 100) {
-            if (gx < minX) minX = gx;
-            if (gx > maxX) maxX = gx;
-          }
-        }
-
-        // この行に人物が存在する場合、左右の外側のリアルタイム背景を引き伸ばして埋める
-        if (maxX >= minX) {
-          const y = gy * scaleY;
-          const h = scaleY + 2;
-          const personLeft = Math.max(0, (minX - 2) * scaleX);
-          const personRight = Math.min(vw, (maxX + 2) * scaleX);
-          const personWidth = personRight - personLeft;
-          const halfWidth = personWidth / 2;
-
-          // サイン波で光学迷彩のゆらぎを加える
-          const wave = Math.sin(gy * 0.35 + waveTime) * 12 * cloakAlpha;
-
-          // 左側の背景（幅40px分）を人物の左半分に引き伸ばして描画
-          if (personLeft > 20) {
-            const srcX = Math.max(0, personLeft - 45);
-            const srcW = personLeft - srcX;
-            warpCtx.drawImage(video, srcX, y, srcW, h, personLeft - 5 + wave, y, halfWidth + 10, h);
-          } else if (personRight < vw - 20) {
-            // 左側が画面端で背景がない場合は右側の背景で全体を埋める
-            const srcX = personRight;
-            const srcW = Math.min(45, vw - personRight);
-            warpCtx.drawImage(video, srcX, y, srcW, h, personLeft + wave, y, personWidth, h);
-          }
-
-          // 右側の背景（幅40px分）を人物の右半分に引き伸ばして描画
-          if (personRight < vw - 20) {
-            const srcX = personRight;
-            const srcW = Math.min(45, vw - personRight);
-            warpCtx.drawImage(video, srcX, y, srcW, h, personLeft + halfWidth - 5 + wave, y, halfWidth + 10, h);
-          } else if (personLeft > 20) {
-            const srcX = Math.max(0, personLeft - 45);
-            const srcW = personLeft - srcX;
-            warpCtx.drawImage(video, srcX, y, srcW, h, personLeft + wave, y, personWidth, h);
-          }
-        }
+      // 中心と周囲8方向にずらして重ね描きし、マスク領域を確実に太らせる（膨張処理）
+      expandedMaskCtx.drawImage(sourceMask, 0, 0, vw, vh);
+      const dirs = [
+        [1, 0], [-1, 0], [0, 1], [0, -1],
+        [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]
+      ];
+      for (const [dx, dy] of dirs) {
+        expandedMaskCtx.drawImage(sourceMask, dx * radius, dy * radius, vw, vh);
       }
-
-      // 引き伸ばした境界を馴染ませるために軽くブラーをかける
-      warpCtx.save();
-      warpCtx.filter = 'blur(6px)';
-      warpCtx.drawImage(warpCanvas, 0, 0);
-      warpCtx.restore();
-    }
-
-    // 【モード②用】人物から十分に離れた「安全な背景領域」だけをリアルタイム更新する関数
-    function updateSmartBackground(vw, vh, maskData) {
-      const scaleX = vw / GRID_W;
-      const scaleY = vh / GRID_H;
-
-      for (let gy = 0; gy < GRID_H; gy++) {
-        for (let gx = 0; gx < GRID_W; gx++) {
-          // 周囲1マスを含めて人間が全くいないかチェック（輪郭の映り込みを完全防止）
-          let isSafeBg = true;
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -2; dx <= 2; dx++) {
-              const ny = Math.min(GRID_H - 1, Math.max(0, gy + dy));
-              const nx = Math.min(GRID_W - 1, Math.max(0, gx + dx));
-              const idx = (ny * GRID_W + nx) * 4;
-              if (maskData[idx] > 30 || maskData[idx + 3] > 30) {
-                isSafeBg = false;
-                break;
-              }
-            }
-            if (!isSafeBg) break;
-          }
-
-          // 完全に人間がいない領域だけ、最新のカメラ映像で背景キャンバスを上書きする
-          if (isSafeBg) {
-            bgCtx.drawImage(
-              video,
-              gx * scaleX, gy * scaleY, scaleX, scaleY,
-              gx * scaleX, gy * scaleY, scaleX, scaleY
-            );
-          }
-        }
-      }
+      expandedMaskCtx.filter = 'none';
     }
 
     function renderLoop() {
       const vw = canvas.width;
       const vh = canvas.height;
-      waveTime += 0.15;
 
+      // AI推論を非同期実行
       if (!isProcessingAI && video.readyState >= 2) {
         isProcessingAI = true;
         Promise.all([
@@ -384,90 +369,101 @@
         });
       }
 
-      // 透明度の更新（じわーっと変化）
-      if (isSquarePose) {
-        cloakAlpha = Math.min(1.0, cloakAlpha + FADE_IN_SPEED);
-      } else {
-        cloakAlpha = Math.max(0.0, cloakAlpha - FADE_OUT_SPEED);
+      // --- 四角形ポーズの判定 ---
+      let isPoseNow = false;
+      if (latestHands.length >= 2) {
+        const h1 = latestHands[0];
+        const h2 = latestHands[1];
+
+        const cross1 = getDistance(h1[4], h2[8]);
+        const cross2 = getDistance(h1[8], h2[4]);
+        const para1 = getDistance(h1[4], h2[4]);
+        const para2 = getDistance(h1[8], h2[8]);
+
+        const th = 0.16;
+        if ((cross1 < th && cross2 < th) || (para1 < th && para2 < th)) {
+          isPoseNow = true;
+        }
       }
 
+      if (cooldownFrames > 0) cooldownFrames--;
+
+      // 背景保存後に四角形ポーズをとったら透明化ON/OFFをトグル
+      if (bgCaptured && isPoseNow && cooldownFrames === 0) {
+        poseHoldFrames++;
+        if (poseHoldFrames > 6) {
+          cloakActive = !cloakActive;
+          poseHoldFrames = 0;
+          cooldownFrames = 45; // 1.5秒間は連続切替を防止
+          statusTxt.innerText = cloakActive
+            ? "✨ 光学迷彩発動中！（もう一度ポーズをとるかボタンで解除）"
+            : "解除しました。四角形ポーズで再び透明になります";
+        }
+      } else {
+        poseHoldFrames = Math.max(0, poseHoldFrames - 1);
+      }
+
+      // 透明度のアニメーション更新（じわーっと変化）
+      if (cloakActive && bgCaptured) {
+        cloakAlpha = Math.min(1.0, cloakAlpha + FADE_SPEED);
+      } else {
+        cloakAlpha = Math.max(0.0, cloakAlpha - FADE_SPEED);
+      }
       gaugeBar.style.width = `${cloakAlpha * 100}%`;
 
-      // ベースとなる現在のカメラ映像を描画
+      // --- 拡張マスクの生成と自動背景学習 ---
+      if (latestMask && bgCaptured) {
+        // 設定されたピクセル幅(expandSize)だけ人物の輪郭を大きく広げる
+        createExpandedMask(latestMask, vw, vh, expandSize);
+
+        // 「背景の自動学習」がONの時は、広げた人物領域のさらに外側の綺麗な背景だけを少しずつ更新
+        if (autoUpdateChk.checked) {
+          bgHoleCtx.clearRect(0, 0, vw, vh);
+          bgHoleCtx.drawImage(video, 0, 0, vw, vh);
+          bgHoleCtx.globalCompositeOperation = 'destination-out';
+          // 人物のフチが背景に混ざらないよう、拡張マスクを2回重ねて確実にくり抜く
+          bgHoleCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
+          bgHoleCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
+          bgHoleCtx.globalCompositeOperation = 'source-over';
+
+          cleanBgCtx.drawImage(bgHoleCanvas, 0, 0, vw, vh);
+        }
+      }
+
+      // --- メイン画面の描画 ---
       ctx.clearRect(0, 0, vw, vh);
       ctx.drawImage(video, 0, 0, vw, vh);
 
-      if (latestMask) {
-        // マスクを縮小キャンバスに描いてピクセルデータを取得（高速解析用）
-        smallMaskCtx.clearRect(0, 0, GRID_W, GRID_H);
-        smallMaskCtx.drawImage(latestMask, 0, 0, GRID_W, GRID_H);
-        const maskData = smallMaskCtx.getImageData(0, 0, GRID_W, GRID_H).data;
+      if (cloakAlpha > 0.01 && latestMask && bgCaptured) {
+        personCtx.clearRect(0, 0, vw, vh);
 
-        // モード②の場合は、人物がいない安全領域の背景を毎フレーム自動更新
-        if (currentMode === 'smart_bg' && bgCaptured) {
-          updateSmartBackground(vw, vh, maskData);
-        }
+        // 大きく広げたマスクを描画（輪郭が濃いめになるよう2回重ねて中心部を100%不透明にする）
+        personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
+        personCtx.drawImage(expandedMaskCanvas, 0, 0, vw, vh);
 
-        // 透明化エフェクトの描画
-        if (cloakAlpha > 0.01) {
-          let sourceBgCanvas = bgCanvas;
+        // 広げたマスクの内側に、保存しておいた綺麗な背景を流し込む
+        personCtx.globalCompositeOperation = 'source-in';
+        personCtx.drawImage(cleanBgCanvas, 0, 0, vw, vh);
+        personCtx.globalCompositeOperation = 'source-over';
 
-          if (currentMode === 'warp') {
-            // モード①：左右のリアルタイム背景を引き伸ばして空間ワープ画像を生成
-            generateRealtimeWarpBg(vw, vh, maskData);
-            sourceBgCanvas = warpCanvas;
-          } else {
-            // モード②：記憶＋自動更新された背景に少しだけ光学迷彩の揺らぎを足す
-            warpCtx.clearRect(0, 0, vw, vh);
-            const stripH = 10;
-            for (let y = 0; y < vh; y += stripH) {
-              const wave = Math.sin(y * 0.05 + waveTime) * 4 * cloakAlpha;
-              warpCtx.drawImage(bgCanvas, 0, y, vw, stripH, wave, y, vw, stripH);
-            }
-            sourceBgCanvas = warpCanvas;
-          }
-
-          // 人物シルエットの形に切り抜く
-          personCtx.clearRect(0, 0, vw, vh);
-          personCtx.filter = 'blur(8px)';
-          personCtx.drawImage(latestMask, 0, 0, vw, vh);
-          personCtx.filter = 'none';
-
-          personCtx.globalCompositeOperation = 'source-in';
-          personCtx.drawImage(sourceBgCanvas, 0, 0, vw, vh);
-          personCtx.globalCompositeOperation = 'source-over';
-
-          // メイン画面の上に cloakAlpha の不透明度で重ねる（人物が背景で完全に上書きされて消える）
-          ctx.save();
-          ctx.globalAlpha = cloakAlpha;
-          ctx.drawImage(personCanvas, 0, 0, vw, vh);
-          ctx.restore();
-        }
+        // 現在の透明度(cloakAlpha)でカメラ映像の上にじわーっと重ねる
+        ctx.save();
+        ctx.globalAlpha = cloakAlpha;
+        ctx.drawImage(personCanvas, 0, 0, vw, vh);
+        ctx.restore();
       }
 
-      // 指の認識マーカーを描画（ポーズが効いているか確認できる視覚ガイド）
-      // ※完全に消えた時(cloakAlpha > 0.9)はマーカーも薄くして邪魔にならないようにする
-      if (detectedFingerPoints && cloakAlpha < 0.95) {
+      // 指先の認識ガイド（透明になる前のみ小さく表示）
+      if (latestHands.length > 0 && cloakAlpha < 0.85) {
         ctx.save();
-        ctx.strokeStyle = isSquarePose ? '#00e5ff' : 'rgba(255, 255, 0, 0.6)';
-        ctx.fillStyle = isSquarePose ? '#00e5ff' : 'rgba(255, 255, 0, 0.6)';
-        ctx.lineWidth = 3;
-
-        // 親指・人差し指の4点を結ぶ枠とドットを表示
-        detectedFingerPoints.forEach(pt => {
-          ctx.beginPath();
-          ctx.arc(pt.x * vw, pt.y * vh, 6, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        if (isSquarePose) {
-          ctx.beginPath();
-          ctx.moveTo(detectedFingerPoints[0].x * vw, detectedFingerPoints[0].y * vh);
-          ctx.lineTo(detectedFingerPoints[1].x * vw, detectedFingerPoints[1].y * vh);
-          ctx.lineTo(detectedFingerPoints[3].x * vw, detectedFingerPoints[3].y * vh);
-          ctx.lineTo(detectedFingerPoints[2].x * vw, detectedFingerPoints[2].y * vh);
-          ctx.closePath();
-          ctx.stroke();
+        for (const hand of latestHands) {
+          [4, 8].forEach(idx => {
+            const pt = hand[idx];
+            ctx.beginPath();
+            ctx.arc(pt.x * vw, pt.y * vh, 7, 0, Math.PI * 2);
+            ctx.fillStyle = isPoseNow ? '#76ff03' : 'rgba(0, 229, 255, 0.75)';
+            ctx.fill();
+          });
         }
         ctx.restore();
       }
